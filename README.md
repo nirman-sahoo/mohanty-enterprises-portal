@@ -39,6 +39,7 @@ This repository is pre-configured for **zero-config, production-ready deployment
 ## 🛠 Features Configured for Production Stability
 
 - **SPA Fallback Routing (`vercel.json`)**: Configured with wildcard rewrites (`/(.*) -> /index.html`) so refreshing on any route will not return 404 errors.
+- **Dependency Resolution (`.npmrc` & `vercel.json`)**: Configured with `legacy-peer-deps=true` and `installCommand: "npm install --legacy-peer-deps"` to prevent npm `ERESOLVE` peer dependency conflicts with Vite / esbuild.
 - **Cross-Platform ESM Configuration (`vite.config.ts`)**: Configured using standard ESM directory resolution, preventing bundler issues in Linux CI/CD environments.
 - **Strict TypeScript Validation (`tsc --noEmit`)**: Passes full type checking with no errors.
 - **Tailwind CSS v4 Integration**: Pre-compiled and bundled for production.
