@@ -1,0 +1,6 @@
+{
+  "name": "Mohanty Enterprises - B2B Trading Terminal",
+  "description": "Wholesale B2B trading terminal for Cement, TMT Bars, Fertilizers, and Asbestos sheets.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
