@@ -1,7 +1,7 @@
 import React from 'react';
 import { 
   LayoutDashboard, 
-  PlusCircle, 
+  ClipboardList, 
   FileText, 
   Boxes, 
   BookOpen, 
@@ -24,10 +24,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const navItems: { id: NavTab; label: string; icon: React.ElementType }[] = [
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
-    { id: 'new-sale', label: 'New Sale', icon: PlusCircle },
+    { id: 'new-sale', label: 'Orders & Estimates', icon: ClipboardList },
     { id: 'invoices', label: 'Invoices', icon: FileText },
     { id: 'inventory', label: 'Inventory', icon: Boxes },
-    { id: 'ledger', label: 'Ledger', icon: BookOpen },
+    { id: 'ledger', label: 'Khatabook Ledger', icon: BookOpen },
   ];
 
   return (

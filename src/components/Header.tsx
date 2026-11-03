@@ -34,13 +34,13 @@ export const Header: React.FC<HeaderProps> = ({
       case 'overview':
         return 'Executive Overview';
       case 'new-sale':
-        return 'Sale Entry Terminal';
+        return 'Orders & Estimates';
       case 'invoices':
         return 'Commercial Invoices';
       case 'inventory':
         return 'Material Inventory';
       case 'ledger':
-        return 'Party Accounts & Ledger';
+        return 'Party Accounts & Khatabook Ledger';
       default:
         return 'Overview';
     }
@@ -73,13 +73,13 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
 
-        {/* SINGLE prominent "+ Record Sale" primary button */}
+        {/* SINGLE prominent "+ New Order" primary button */}
         <button
           onClick={onOpenRecordSale}
           className="flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 active:bg-slate-950 text-white text-xs font-semibold rounded-lg shadow-sm hover:shadow transition-all cursor-pointer whitespace-nowrap shrink-0"
         >
           <Plus className="w-4 h-4 text-amber-400" />
-          <span>+ Record Sale</span>
+          <span>+ New Order / Estimate</span>
         </button>
       </div>
     </header>

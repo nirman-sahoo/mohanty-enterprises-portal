@@ -2,243 +2,382 @@ import React, { useState } from 'react';
 import { 
   BookOpen, 
   Search, 
-  CreditCard, 
+  Download, 
   Plus, 
+  FileText,
+  MessageCircle,
+  Smartphone,
   ArrowDownRight, 
-  CheckCircle2, 
-  Building2,
-  Phone,
-  FileCheck
+  FileSpreadsheet,
+  FileCheck,
+  Calendar,
+  Eye,
+  CheckCircle2,
+  Clock
 } from 'lucide-react';
-import { CustomerLedger } from '../types';
-import { formatINR } from '../data/inventoryData';
+import { CustomerLedger, StatementEntry } from '../types';
+import { formatINR, generateLedgerReminderWhatsAppUrl } from '../utils/formatters';
 
 interface LedgerViewProps {
   ledgers: CustomerLedger[];
-  onRecordPayment: (ledgerId: string, amount: number) => void;
+  onOpenReceivePayment: (party: CustomerLedger) => void;
+  onOpenStatement: (party: CustomerLedger) => void;
+  onUpdateFollowUp: (ledgerId: string, nextFollowUpDate: string, note: string) => void;
   onOpenRecordSale: () => void;
 }
 
 export const LedgerView: React.FC<LedgerViewProps> = ({
   ledgers,
-  onRecordPayment,
+  onOpenReceivePayment,
+  onOpenStatement,
+  onUpdateFollowUp,
   onOpenRecordSale,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [paymentModalParty, setPaymentModalParty] = useState<CustomerLedger | null>(null);
-  const [paymentAmount, setPaymentAmount] = useState<number>(100000);
-  const [paymentMode, setPaymentMode] = useState<string>('RTGS / NEFT');
+  const [selectedFollowUpParty, setSelectedFollowUpParty] = useState<CustomerLedger | null>(null);
+  const [followUpDate, setFollowUpDate] = useState('');
+  const [followUpNote, setFollowUpNote] = useState('');
+  const [copiedSmsPartyId, setCopiedSmsPartyId] = useState<string | null>(null);
 
   const filteredLedgers = ledgers.filter((party) =>
     party.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     party.gstin.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    party.phone.includes(searchTerm) ||
     party.address.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const totalOutstanding = ledgers.reduce((acc, l) => acc + l.outstandingReceivable, 0);
-  const totalBilled = ledgers.reduce((acc, l) => acc + l.totalBilled, 0);
+  const totalOverdue = ledgers.reduce((acc, l) => acc + (l.totalOverdue || l.outstandingReceivable), 0);
 
-  const handlePaymentSubmit = (e: React.FormEvent) => {
+  // Direct WhatsApp Reminder click
+  const handleWhatsAppReminder = (party: CustomerLedger) => {
+    const url = generateLedgerReminderWhatsAppUrl(party);
+    window.open(url, '_blank');
+  };
+
+  // Direct SMS Copy action
+  const handleSmsAction = (party: CustomerLedger) => {
+    const smsText = `MOHANTY ENTERPRISES: Payment reminder for ${party.name}. Outstanding balance: ${formatINR(party.outstandingReceivable)}. Oldest due: ${party.oldestDueDays} days. Please clear via RTGS/NEFT. Contact: 9861044211.`;
+    navigator.clipboard.writeText(smsText);
+    setCopiedSmsPartyId(party.id);
+    setTimeout(() => setCopiedSmsPartyId(null), 2500);
+  };
+
+  // Export Excel / CSV
+  const handleExportCSV = () => {
+    const headers = [
+      'Company Name',
+      'GSTIN',
+      'Phone',
+      'Total Due',
+      'Total Overdue',
+      'Last Payment Date',
+      'Average Collection (Days)',
+      'Oldest Due (Days)',
+      'Next Follow-Up',
+      'Promises to Pay / Remark'
+    ];
+
+    const rows = filteredLedgers.map((p) => [
+      `"${p.name}"`,
+      p.gstin,
+      p.phone,
+      p.outstandingReceivable,
+      p.totalOverdue || p.outstandingReceivable,
+      p.lastPaymentDate || '',
+      p.averageCollectionDays || '',
+      p.oldestDueDays || '',
+      p.nextFollowUpDate || '',
+      `"${p.promisesToPay || p.followUpNote || ''}"`
+    ]);
+
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `Khatabook_Ledger_Mohanty_Enterprises_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleFollowUpSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (paymentModalParty && paymentAmount > 0) {
-      onRecordPayment(paymentModalParty.id, paymentAmount);
-      setPaymentModalParty(null);
+    if (selectedFollowUpParty && followUpDate) {
+      onUpdateFollowUp(selectedFollowUpParty.id, followUpDate, followUpNote);
+      setSelectedFollowUpParty(null);
     }
   };
 
   return (
     <div className="space-y-6">
-      {/* Top Banner */}
+      {/* Top Banner & Summaries */}
       <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-base font-bold text-slate-900 tracking-tight">
-            Contractor & Buyer Party Ledger
-          </h2>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Credit book, receivable tracking, and payment reconciliations for registered contractors
+          <div className="flex items-center gap-2">
+            <span className="px-2 py-0.5 bg-amber-500/10 text-amber-700 text-xs font-bold rounded border border-amber-500/20 uppercase tracking-wider">
+              Khatabook System
+            </span>
+            <h2 className="text-base font-bold text-slate-900 tracking-tight">
+              Party Accounts & Ledger Registry
+            </h2>
+          </div>
+          <p className="text-xs text-slate-500 mt-1">
+            Credit book, follow-ups, and collection tracking for registered wholesale contractors
           </p>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-3">
           <div className="text-right">
-            <p className="text-xs text-slate-500 uppercase tracking-wider font-semibold">Total Outstanding Balance</p>
+            <p className="text-[11px] text-slate-500 uppercase tracking-wider font-semibold">Total Outstanding</p>
             <p className="text-xl font-bold font-mono text-rose-700 tabular-nums">
               {formatINR(totalOutstanding)}
             </p>
           </div>
-          <button
-            onClick={onOpenRecordSale}
-            className="flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5 text-amber-400" />
-            <span>+ New Billing Entry</span>
-          </button>
+
+          <div className="flex items-center gap-2">
+            {/* Download PDF button (Page 3) */}
+            <button
+              onClick={() => window.print()}
+              className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+              title="Download or Print PDF"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Download PDF</span>
+            </button>
+
+            {/* Download Excel button (Page 3) */}
+            <button
+              onClick={handleExportCSV}
+              className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+              title="Download Excel / CSV"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-700" />
+              <span>Download Excel</span>
+            </button>
+
+            <button
+              onClick={onOpenRecordSale}
+              className="flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-lg shadow-sm transition-colors cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5 text-amber-400" />
+              <span>+ New Order</span>
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Search */}
-      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-        <div className="relative">
+      {/* Search & Feedback Banner */}
+      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="relative flex-1 w-full">
           <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search parties by company name, GSTIN, or city..."
+            placeholder="Search parties by company name, GSTIN, phone, or town..."
             className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:bg-white"
           />
         </div>
+
+        {copiedSmsPartyId && (
+          <div className="flex items-center gap-1.5 text-xs text-emerald-700 font-semibold bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200">
+            <CheckCircle2 className="w-4 h-4" />
+            <span>SMS reminder copied to clipboard!</span>
+          </div>
+        )}
       </div>
 
-      {/* Party Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {filteredLedgers.map((party) => {
-          const utilizationPct = Math.min(100, Math.round((party.outstandingReceivable / party.creditLimit) * 100));
-          return (
-            <div
-              key={party.id}
-              className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 flex flex-col justify-between hover:border-slate-300 transition-all"
-            >
-              <div>
-                <div className="flex items-start justify-between gap-2 pb-3 border-b border-slate-100">
-                  <div>
-                    <h3 className="text-sm font-bold text-slate-900">{party.name}</h3>
-                    <p className="text-xs font-mono text-slate-500 mt-0.5">GSTIN: {party.gstin}</p>
-                    <p className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
-                      <Phone className="w-3 h-3 text-slate-400" />
-                      <span>{party.phone}</span>
-                      <span className="text-slate-300">·</span>
-                      <span>{party.address}</span>
-                    </p>
-                  </div>
-                  <span className="text-[11px] font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded shrink-0">
-                    {party.creditDays} Days Credit
-                  </span>
-                </div>
+      {/* KHATABOOK SINGLE-FORMAT CONSOLIDATED TABLE (Matching Page 3 layout) */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs border-collapse">
+            <thead className="bg-slate-900 text-white uppercase font-bold text-[11px] border-b border-slate-800 tracking-wider">
+              <tr>
+                <th className="py-3 px-3.5">Company Name</th>
+                <th className="py-3 px-3 text-right">Total Due (₹)</th>
+                <th className="py-3 px-3 text-right">Total Overdue (₹)</th>
+                <th className="py-3 px-3">Last Payment</th>
+                <th className="py-3 px-3 text-center">Avg. Collection</th>
+                <th className="py-3 px-3 text-center">Oldest Due</th>
+                <th className="py-3 px-3">Next Follow-Up</th>
+                <th className="py-3 px-3">Promises to Pay / Remark</th>
+                <th className="py-3 px-3 text-center">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 font-medium">
+              {filteredLedgers.map((party) => (
+                <tr key={party.id} className="hover:bg-slate-50/90 transition-colors">
+                  {/* Company Name */}
+                  <td className="py-3 px-3.5 font-bold text-slate-900 max-w-[190px]">
+                    <button
+                      onClick={() => onOpenStatement(party)}
+                      className="text-left hover:text-amber-600 transition-colors cursor-pointer group"
+                    >
+                      <p className="group-hover:underline text-xs">{party.name}</p>
+                      <p className="text-[10px] text-slate-400 font-mono font-normal truncate mt-0.5">
+                        {party.gstin} · {party.phone}
+                      </p>
+                    </button>
+                  </td>
 
-                {/* Billing Summary */}
-                <div className="grid grid-cols-3 gap-2 py-4 text-xs">
-                  <div>
-                    <p className="text-slate-500 text-[11px]">Total Billed</p>
-                    <p className="font-mono font-bold text-slate-900 mt-0.5 tabular-nums">
-                      {formatINR(party.totalBilled)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-slate-500 text-[11px]">Total Paid</p>
-                    <p className="font-mono font-bold text-emerald-700 mt-0.5 tabular-nums">
-                      {formatINR(party.totalPaid)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-slate-500 text-[11px]">Current Outstanding</p>
-                    <p className="font-mono font-bold text-rose-700 mt-0.5 tabular-nums">
-                      {formatINR(party.outstandingReceivable)}
-                    </p>
-                  </div>
-                </div>
+                  {/* Total Due */}
+                  <td className="py-3 px-3 text-right font-mono font-bold text-slate-900 tabular-nums">
+                    {formatINR(party.outstandingReceivable)}
+                  </td>
 
-                {/* Credit limit progress */}
-                <div className="space-y-1">
-                  <div className="flex justify-between text-[11px] text-slate-500">
-                    <span>Credit Limit: {formatINR(party.creditLimit)}</span>
-                    <span className="font-mono font-semibold">{utilizationPct}% Utilized</span>
-                  </div>
-                  <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all duration-300 ${
-                        utilizationPct > 80 ? 'bg-rose-500' : utilizationPct > 50 ? 'bg-amber-500' : 'bg-emerald-500'
-                      }`}
-                      style={{ width: `${utilizationPct}%` }}
-                    />
-                  </div>
-                </div>
-              </div>
+                  {/* Total Overdue */}
+                  <td className="py-3 px-3 text-right font-mono font-bold text-rose-700 tabular-nums">
+                    {formatINR(party.totalOverdue || party.outstandingReceivable)}
+                  </td>
 
-              {/* Actions */}
-              <div className="pt-4 mt-3 border-t border-slate-100 flex items-center justify-between text-xs">
-                <span className="text-slate-400 text-[11px]">
-                  Last sale: <strong className="text-slate-600 font-mono">{party.lastTransactionDate}</strong>
-                </span>
-                <button
-                  onClick={() => {
-                    setPaymentModalParty(party);
-                    setPaymentAmount(Math.min(party.outstandingReceivable, 150000));
-                  }}
-                  className="px-3 py-1.5 font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
-                >
-                  <ArrowDownRight className="w-3.5 h-3.5" />
-                  <span>Receive Payment</span>
-                </button>
-              </div>
-            </div>
-          );
-        })}
+                  {/* Last Payment */}
+                  <td className="py-3 px-3 font-mono text-slate-600 whitespace-nowrap text-[11px]">
+                    {party.lastPaymentDate || 'Pending'}
+                  </td>
+
+                  {/* Average Collection */}
+                  <td className="py-3 px-3 text-center font-mono text-slate-600 tabular-nums">
+                    {party.averageCollectionDays ? `${party.averageCollectionDays} days` : '-'}
+                  </td>
+
+                  {/* Oldest Due */}
+                  <td className="py-3 px-3 text-center font-mono font-bold text-slate-800 tabular-nums">
+                    {party.oldestDueDays ? `${party.oldestDueDays} days` : '-'}
+                  </td>
+
+                  {/* Next Follow-Up (With '+ Add' button as in PDF Page 3) */}
+                  <td className="py-3 px-3 whitespace-nowrap">
+                    {party.nextFollowUpDate ? (
+                      <button
+                        onClick={() => {
+                          setSelectedFollowUpParty(party);
+                          setFollowUpDate(party.nextFollowUpDate || '');
+                          setFollowUpNote(party.followUpNote || '');
+                        }}
+                        className="text-[11px] text-slate-700 hover:text-amber-700 font-semibold cursor-pointer flex items-center gap-1"
+                      >
+                        <Calendar className="w-3 h-3 text-amber-600" />
+                        <span>{party.nextFollowUpDate}</span>
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          setSelectedFollowUpParty(party);
+                          setFollowUpDate('');
+                          setFollowUpNote('');
+                        }}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 transition-colors cursor-pointer"
+                      >
+                        <Plus className="w-3 h-3" />
+                        <span>Add</span>
+                      </button>
+                    )}
+                  </td>
+
+                  {/* Promises to Pay / Remark */}
+                  <td className="py-3 px-3 text-[11px] text-slate-600 max-w-[160px] truncate" title={party.promisesToPay || party.followUpNote}>
+                    {party.promisesToPay || party.followUpNote || '-'}
+                  </td>
+
+                  {/* Action Column with WhatsApp, SMS, Money Receipt, and Statement icons (PDF Page 3) */}
+                  <td className="py-3 px-3 text-center whitespace-nowrap">
+                    <div className="flex items-center justify-center gap-1.5">
+                      {/* WhatsApp icon */}
+                      <button
+                        onClick={() => handleWhatsAppReminder(party)}
+                        title="Send WhatsApp Reminder"
+                        className="p-1 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded transition-colors cursor-pointer"
+                      >
+                        <MessageCircle className="w-4 h-4 fill-emerald-100 stroke-[2.2]" />
+                      </button>
+
+                      {/* SMS icon */}
+                      <button
+                        onClick={() => handleSmsAction(party)}
+                        title="Copy SMS Reminder text"
+                        className="p-1 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded transition-colors cursor-pointer"
+                      >
+                        <Smartphone className="w-4 h-4 stroke-[2.2]" />
+                      </button>
+
+                      {/* Receive Payment / Money Receipt button */}
+                      <button
+                        onClick={() => onOpenReceivePayment(party)}
+                        title="Receive Payment & Create Money Receipt"
+                        className="p-1 text-amber-600 hover:text-amber-700 hover:bg-amber-50 rounded transition-colors cursor-pointer"
+                      >
+                        <ArrowDownRight className="w-4 h-4 stroke-[2.4]" />
+                      </button>
+
+                      {/* View Statement button */}
+                      <button
+                        onClick={() => onOpenStatement(party)}
+                        title="Open Khatabook Statement"
+                        className="p-1 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded transition-colors cursor-pointer"
+                      >
+                        <Eye className="w-4 h-4 stroke-[2.2]" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      {/* Record Payment Receipt Modal */}
-      {paymentModalParty && (
+      {/* Follow-up Note & Date Modal */}
+      {selectedFollowUpParty && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm">
           <div className="bg-white rounded-xl shadow-xl border border-slate-200 w-full max-w-md p-6">
             <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-1">
-              Record Payment Receipt
+              Schedule Collection Follow-up
             </h3>
             <p className="text-xs text-slate-500 mb-4">
-              Collecting funds from <strong className="text-slate-800">{paymentModalParty.name}</strong>
+              Party: <strong className="text-slate-800">{selectedFollowUpParty.name}</strong>
             </p>
 
-            <form onSubmit={handlePaymentSubmit} className="space-y-4">
+            <form onSubmit={handleFollowUpSubmit} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
-                  Payment Mode
-                </label>
-                <select
-                  value={paymentMode}
-                  onChange={(e) => setPaymentMode(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/50"
-                >
-                  <option value="RTGS / NEFT">RTGS / NEFT Bank Transfer</option>
-                  <option value="Cheque / DD">Account Payee Cheque / DD</option>
-                  <option value="UPI / QR">Business UPI / Immediate Transfer</option>
-                  <option value="Cash Deposit">Bank Cash Deposit</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
-                  Amount Received (₹)
+                  Next Follow-Up Date
                 </label>
                 <input
-                  type="number"
-                  min="1"
-                  step="any"
+                  type="date"
                   required
-                  value={paymentAmount}
-                  onChange={(e) => setPaymentAmount(parseFloat(e.target.value) || 0)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-sm font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                  value={followUpDate}
+                  onChange={(e) => setFollowUpDate(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/50"
                 />
               </div>
 
-              <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 text-xs text-slate-600 flex justify-between">
-                <span>Remaining Balance:</span>
-                <span className="font-mono font-bold text-rose-700">
-                  {formatINR(Math.max(0, paymentModalParty.outstandingReceivable - paymentAmount))}
-                </span>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
+                  Promises to Pay / Follow-up Remark
+                </label>
+                <textarea
+                  rows={3}
+                  value={followUpNote}
+                  onChange={(e) => setFollowUpNote(e.target.value)}
+                  placeholder="e.g. Promised ₹5,00,000 RTGS after site bill passed on 18th"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                />
               </div>
 
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
-                  onClick={() => setPaymentModalParty(null)}
+                  onClick={() => setSelectedFollowUpParty(null)}
                   className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 rounded-lg"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg shadow-sm"
+                  className="px-4 py-2 text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-lg shadow-sm"
                 >
-                  Post to Ledger
+                  Save Follow-Up
                 </button>
               </div>
             </form>
