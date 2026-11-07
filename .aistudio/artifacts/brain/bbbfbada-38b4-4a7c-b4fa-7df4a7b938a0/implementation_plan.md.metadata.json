@@ -1,6 +1,0 @@
-{
-  "summary": "Implementation plan for Mohanty Enterprises B2B Trading Terminal client updates including multi-item order lifecycle with WhatsApp verification, GST/non-GST billing toggle, digital compact thermal receipt format, payment voucher receipt with amount in words, Khatabook single-format party ledger, and detailed customer transaction statements.",
-  "updatedAt": "2026-11-03T03:43:38.284444200Z",
-  "requestFeedback": true,
-  "userFacing": true
-}

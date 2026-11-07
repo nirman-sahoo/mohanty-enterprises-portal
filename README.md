@@ -28,7 +28,7 @@ This repository is pre-configured for **zero-config, production-ready deployment
    - **Framework Preset**: `Vite`
    - **Build Command**: `npm run build`
    - **Output Directory**: `dist`
-   - **Install Command**: `npm install`
+   - **Install Command**: `npm install --legacy-peer-deps`
 
 4. **Deploy**:
    - Click **"Deploy"**.

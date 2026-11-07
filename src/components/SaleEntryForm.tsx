@@ -42,7 +42,7 @@ export const SaleEntryForm: React.FC<SaleEntryFormProps> = ({
   // Order Header details (Page 1)
   const [customerName, setCustomerName] = useState('');
   const [shipToAddress, setShipToAddress] = useState('');
-  const [customerPhone, setCustomerPhone] = useState('+91 94370 28190');
+  const [customerPhone, setCustomerPhone] = useState('');
   const [dateOfSale, setDateOfSale] = useState(new Date().toISOString().split('T')[0]);
   const [timeOfSale, setTimeOfSale] = useState(
     new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
@@ -54,16 +54,16 @@ export const SaleEntryForm: React.FC<SaleEntryFormProps> = ({
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('Credit');
   const [isGst, setIsGst] = useState<boolean>(true);
 
-  // Multi-item order items list (Page 1: "item (select multipal item)")
+  // Multi-item order items list initialized cleanly with 1 row at zero quantity
   const [orderItems, setOrderItems] = useState<OrderItem[]>([
     {
       id: `item-${Date.now()}-1`,
       category: 'CEMENT',
       itemDescription: CATEGORY_ITEMS['CEMENT'][0],
-      quantity: 100,
+      quantity: 0,
       unit: 'Bags',
       unitPrice: 410,
-      amount: 41000,
+      amount: 0,
     },
   ]);
 
@@ -73,16 +73,47 @@ export const SaleEntryForm: React.FC<SaleEntryFormProps> = ({
   const [orderVerificationStatus, setOrderVerificationStatus] = useState<'Pending' | 'Confirmed' | 'Cancelled'>('Pending');
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // Line item manipulation
+  const resetForm = () => {
+    setCustomerName('');
+    setShipToAddress('');
+    setCustomerPhone('');
+    setTruckNumber('');
+    setOrderNumber(`ORD-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`);
+    setDateOfSale(new Date().toISOString().split('T')[0]);
+    setTimeOfSale(new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }));
+    setPaymentStatus('Credit');
+    setIsGst(true);
+    setOrderItems([
+      {
+        id: `item-${Date.now()}-1`,
+        category: 'CEMENT',
+        itemDescription: CATEGORY_ITEMS['CEMENT'][0],
+        quantity: 0,
+        unit: 'Bags',
+        unitPrice: 410,
+        amount: 0,
+      },
+    ]);
+    setActiveStage(1);
+    setCurrentCreatedOrder(null);
+    setOrderVerificationStatus('Pending');
+    setErrors({});
+  };
+
+  // Line item manipulation - new items start with 0 quantity and 0 amount
   const handleAddItemRow = () => {
+    const defaultCat: Category = 'CEMENT';
+    const defaultDesc = CATEGORY_ITEMS[defaultCat][0];
+    const matchInv = inventory.find((i) => i.name === defaultDesc);
+
     const newItem: OrderItem = {
       id: `item-${Date.now()}-${orderItems.length + 1}`,
-      category: 'SCAN TMT BAR',
-      itemDescription: CATEGORY_ITEMS['SCAN TMT BAR'][3], // M/S TMT RODS 12mm
-      quantity: 5,
-      unit: 'Tons',
-      unitPrice: 54500,
-      amount: 272500,
+      category: defaultCat,
+      itemDescription: defaultDesc,
+      quantity: 0,
+      unit: (DEFAULT_UNITS[defaultCat]?.[0] || 'Bags') as UnitType,
+      unitPrice: matchInv?.unitPrice || 410,
+      amount: 0,
     };
     setOrderItems([...orderItems, newItem]);
   };
@@ -120,8 +151,18 @@ export const SaleEntryForm: React.FC<SaleEntryFormProps> = ({
             }
           }
 
+          // If unit changed to/from KG, assist with rate conversion while allowing direct per-kg pricing
+          if (field === 'unit') {
+            const newUnit = val as UnitType;
+            if (newUnit === 'KG' && item.unit === 'Tons' && item.unitPrice > 1000) {
+              updated.unitPrice = Number((item.unitPrice / 1000).toFixed(2));
+            } else if (newUnit === 'Tons' && item.unit === 'KG' && item.unitPrice < 200) {
+              updated.unitPrice = Math.round(item.unitPrice * 1000);
+            }
+          }
+
           // Recalculate line total
-          if (field === 'quantity' || field === 'unitPrice' || field === 'category' || field === 'itemDescription') {
+          if (field === 'quantity' || field === 'unitPrice' || field === 'unit' || field === 'category' || field === 'itemDescription') {
             updated.amount = Math.max(0, (Number(updated.quantity) || 0) * (Number(updated.unitPrice) || 0));
           }
 
@@ -130,6 +171,11 @@ export const SaleEntryForm: React.FC<SaleEntryFormProps> = ({
         return item;
       })
     );
+
+    // Clear items error when user types
+    if (field === 'quantity' && errors.items) {
+      setErrors((prev) => ({ ...prev, items: '' }));
+    }
   };
 
   // Calculation totals
@@ -148,6 +194,8 @@ export const SaleEntryForm: React.FC<SaleEntryFormProps> = ({
     }
     if (orderItems.length === 0) {
       newErrors.items = 'Please add at least one line item';
+    } else if (orderItems.some((it) => !it.quantity || it.quantity <= 0)) {
+      newErrors.items = 'Please enter a quantity greater than zero for all line items';
     }
 
     if (Object.keys(newErrors).length > 0) {
@@ -226,6 +274,7 @@ export const SaleEntryForm: React.FC<SaleEntryFormProps> = ({
       status: 'In Transit',
     };
     onRecordSale(finalizedSale);
+    resetForm();
   };
 
   return (
@@ -367,7 +416,7 @@ export const SaleEntryForm: React.FC<SaleEntryFormProps> = ({
                   type="text"
                   value={truckNumber}
                   onChange={(e) => setTruckNumber(e.target.value)}
-                  placeholder="OD-02-AK-9142"
+                  placeholder="e.g. OD-02-AK-9142"
                   className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono uppercase text-slate-900"
                 />
               </div>
@@ -380,7 +429,7 @@ export const SaleEntryForm: React.FC<SaleEntryFormProps> = ({
                   type="text"
                   value={customerPhone}
                   onChange={(e) => setCustomerPhone(e.target.value)}
-                  placeholder="+91 94370 28190"
+                  placeholder="e.g. +91 94370 28190"
                   className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono text-slate-900"
                 />
               </div>
@@ -454,26 +503,43 @@ export const SaleEntryForm: React.FC<SaleEntryFormProps> = ({
                       <td className="py-2 px-3">
                         <input
                           type="number"
-                          min="0.1"
+                          min="0"
                           step="any"
-                          required
-                          value={item.quantity || ''}
-                          onChange={(e) => handleItemChange(item.id, 'quantity', parseFloat(e.target.value) || 0)}
+                          value={item.quantity === 0 ? '' : item.quantity}
+                          placeholder="0"
+                          onChange={(e) => {
+                            const val = e.target.value === '' ? 0 : parseFloat(e.target.value) || 0;
+                            handleItemChange(item.id, 'quantity', val);
+                          }}
                           className="w-full px-2 py-1.5 bg-slate-50 border border-slate-300 rounded font-mono text-xs text-slate-900 font-semibold"
                         />
                       </td>
 
-                      {/* Unit */}
+                      {/* Unit & Quick KG Button */}
                       <td className="py-2 px-3">
-                        <select
-                          value={item.unit}
-                          onChange={(e) => handleItemChange(item.id, 'unit', e.target.value as UnitType)}
-                          className="w-full px-2 py-1.5 bg-slate-50 border border-slate-300 rounded text-xs text-slate-800"
-                        >
-                          {ALL_UNITS.map((u) => (
-                            <option key={u} value={u}>{u}</option>
-                          ))}
-                        </select>
+                        <div className="flex items-center gap-1">
+                          <select
+                            value={item.unit}
+                            onChange={(e) => handleItemChange(item.id, 'unit', e.target.value as UnitType)}
+                            className="w-full px-2 py-1.5 bg-slate-50 border border-slate-300 rounded text-xs text-slate-800 font-medium"
+                          >
+                            {ALL_UNITS.map((u) => (
+                              <option key={u} value={u}>{u}</option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            onClick={() => handleItemChange(item.id, 'unit', 'KG')}
+                            title="Set unit to Kilograms (KG)"
+                            className={`px-1.5 py-1 text-[10px] font-bold rounded border transition-colors cursor-pointer shrink-0 ${
+                              item.unit === 'KG'
+                                ? 'bg-amber-500 text-slate-950 border-amber-600'
+                                : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
+                            }`}
+                          >
+                            KG
+                          </button>
+                        </div>
                       </td>
 
                       {/* Unit Price */}
@@ -510,6 +576,12 @@ export const SaleEntryForm: React.FC<SaleEntryFormProps> = ({
                 </tbody>
               </table>
             </div>
+
+            {errors.items && (
+              <p className="text-xs font-semibold text-rose-600 bg-rose-50 px-3 py-2 rounded-lg border border-rose-200">
+                {errors.items}
+              </p>
+            )}
           </div>
 
           {/* Pricing & GST Breakdown Banner */}
@@ -545,7 +617,10 @@ export const SaleEntryForm: React.FC<SaleEntryFormProps> = ({
             {onCancel && (
               <button
                 type="button"
-                onClick={onCancel}
+                onClick={() => {
+                  resetForm();
+                  onCancel();
+                }}
                 className="px-5 py-2.5 text-xs font-semibold text-slate-600 hover:text-slate-900 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
               >
                 Cancel

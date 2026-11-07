@@ -12,12 +12,13 @@ import {
   Filter,
   CheckCircle2
 } from 'lucide-react';
-import { InventoryItem, SaleRecord, Category } from '../types';
+import { InventoryItem, SaleRecord, Category, CustomerLedger } from '../types';
 import { CATEGORIES, formatINR } from '../data/inventoryData';
 
 interface DashboardViewProps {
   inventory: InventoryItem[];
   sales: SaleRecord[];
+  ledgers?: CustomerLedger[];
   onOpenRecordSale: () => void;
   onViewInvoice: (sale: SaleRecord) => void;
   onNavigateToTab: (tab: any) => void;
@@ -26,6 +27,7 @@ interface DashboardViewProps {
 export const DashboardView: React.FC<DashboardViewProps> = ({
   inventory,
   sales,
+  ledgers = [],
   onOpenRecordSale,
   onViewInvoice,
   onNavigateToTab,
@@ -33,17 +35,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('ALL');
 
   // Compute Core Metrics
-  // 1. Today's Sales Value (₹) - today is 2026-10-11
-  const todaySales = sales.filter((s) => s.date === '2026-10-11' || s.date === new Date().toISOString().split('T')[0]);
+  // 1. Today's Sales Value (₹)
+  const todayStr = new Date().toISOString().split('T')[0];
+  const todaySales = sales.filter((s) => s.date === todayStr);
   const todaySalesValue = todaySales.reduce((acc, s) => acc + s.totalAmount, 0);
 
   // 2. Active Deliveries (Trucks in transit)
   const activeDeliveriesCount = sales.filter((s) => s.status === 'In Transit').length;
 
-  // 3. Outstanding Receivables (₹)
-  const outstandingReceivables = sales
-    .filter((s) => s.paymentStatus === 'Credit' || s.paymentStatus === 'Partial')
-    .reduce((acc, s) => acc + (s.paymentStatus === 'Credit' ? s.totalAmount : s.totalAmount * 0.5), 0) + 2680000;
+  // 3. Outstanding Receivables (₹) - derived strictly from live customer ledgers
+  const outstandingReceivables = ledgers.length > 0
+    ? ledgers.reduce((acc, l) => acc + (l.outstandingReceivable || 0), 0)
+    : sales
+        .filter((s) => s.paymentStatus === 'Credit' || s.paymentStatus === 'Partial')
+        .reduce((acc, s) => acc + (s.paymentStatus === 'Credit' ? s.totalAmount : s.totalAmount * 0.5), 0);
+
+  const partiesWithReceivable = ledgers.filter((l) => (l.outstandingReceivable || 0) > 0).length;
 
   // 4. Total Orders Recorded Today
   const totalOrdersRecordedToday = todaySales.length;
@@ -103,7 +110,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
           <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
             <span>Billing volume</span>
-            <span className="font-semibold text-emerald-600 font-mono">+18.4% vs y'day</span>
+            <span className="font-semibold text-slate-700 font-mono">
+              {todaySales.length} {todaySales.length === 1 ? 'order' : 'orders'} today
+            </span>
           </div>
         </div>
 
@@ -146,7 +155,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
           <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
             <span>B2B Credit Book</span>
-            <span className="font-semibold text-slate-700 font-mono">5 Major Parties</span>
+            <span className="font-semibold text-slate-700 font-mono">
+              {partiesWithReceivable} {partiesWithReceivable === 1 ? 'Party' : 'Parties'} with balance
+            </span>
           </div>
         </div>
 
@@ -193,30 +204,38 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
 
           <div className="divide-y divide-slate-100 mt-2 overflow-y-auto max-h-[380px]">
-            {lowStockItems.map((item) => (
-              <div
-                key={item.id}
-                className="py-3 px-1 flex items-center justify-between gap-3 hover:bg-slate-50/80 transition-colors rounded-lg"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs font-bold text-slate-900 truncate">
-                    {item.name}
-                  </p>
-                  <p className="text-[11px] text-slate-500 mt-0.5 font-medium">
-                    {item.category}
-                  </p>
-                </div>
-
-                <div className="text-right shrink-0">
-                  <p className="text-xs font-bold font-mono text-slate-900 tabular-nums">
-                    {item.stockLevel} {item.unit}
-                  </p>
-                  <span className="inline-block mt-0.5 text-[10px] font-semibold text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
-                    Critical Low
-                  </span>
-                </div>
+            {lowStockItems.length === 0 ? (
+              <div className="py-12 text-center text-slate-400 text-xs">
+                <CheckCircle2 className="w-8 h-8 text-emerald-500/50 mx-auto mb-2" />
+                <p className="font-semibold text-slate-700">All stocks above reorder threshold</p>
+                <p className="text-slate-400 text-[11px] mt-0.5">Warehouse levels are healthy.</p>
               </div>
-            ))}
+            ) : (
+              lowStockItems.map((item) => (
+                <div
+                  key={item.id}
+                  className="py-3 px-1 flex items-center justify-between gap-3 hover:bg-slate-50/80 transition-colors rounded-lg"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-bold text-slate-900 truncate">
+                      {item.name}
+                    </p>
+                    <p className="text-[11px] text-slate-500 mt-0.5 font-medium">
+                      {item.category}
+                    </p>
+                  </div>
+
+                  <div className="text-right shrink-0">
+                    <p className="text-xs font-bold font-mono text-slate-900 tabular-nums">
+                      {item.stockLevel} {item.unit}
+                    </p>
+                    <span className="inline-block mt-0.5 text-[10px] font-semibold text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
+                      Critical Low
+                    </span>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
 
           <div className="mt-auto pt-4 border-t border-slate-100">
@@ -382,67 +401,79 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-medium">
-              {filteredSales.slice(0, 7).map((sale) => (
-                <tr key={sale.id} className="hover:bg-slate-50/80 transition-colors">
-                  <td className="py-3 px-3 font-mono font-bold text-slate-900">
-                    {sale.invoiceNo}
-                  </td>
-                  <td className="py-3 px-3 text-slate-500 font-mono">
-                    {sale.date}
-                  </td>
-                  <td className="py-3 px-3 font-semibold text-slate-800">
-                    {sale.customerName}
-                  </td>
-                  <td className="py-3 px-3 text-slate-600">
-                    {sale.category}
-                  </td>
-                  <td className="py-3 px-3 text-slate-900 font-semibold max-w-[180px] truncate">
-                    {sale.itemDescription}
-                  </td>
-                  <td className="py-3 px-3 text-right font-mono tabular-nums text-slate-700">
-                    {sale.quantity} {sale.unit}
-                  </td>
-                  <td className="py-3 px-3 text-right font-mono font-bold tabular-nums text-slate-900">
-                    {formatINR(sale.totalAmount)}
-                  </td>
-                  <td className="py-3 px-3">
-                    <span
-                      className={`text-[10px] font-semibold px-2 py-0.5 rounded border ${
-                        sale.paymentStatus === 'Paid'
-                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                          : sale.paymentStatus === 'Partial'
-                          ? 'bg-amber-50 text-amber-700 border-amber-200'
-                          : 'bg-rose-50 text-rose-700 border-rose-200'
-                      }`}
-                    >
-                      {sale.paymentStatus}
-                    </span>
-                  </td>
-                  <td className="py-3 px-3">
-                    <span className="text-[11px] text-slate-600 font-medium flex items-center gap-1">
-                      {sale.status === 'In Transit' ? (
-                        <>
-                          <Truck className="w-3 h-3 text-blue-600" />
-                          <span>In Transit</span>
-                        </>
-                      ) : (
-                        <>
-                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                          <span>Delivered</span>
-                        </>
-                      )}
-                    </span>
-                  </td>
-                  <td className="py-3 px-3 text-right">
-                    <button
-                      onClick={() => onViewInvoice(sale)}
-                      className="px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:text-slate-950 bg-slate-100 hover:bg-slate-200 rounded transition-colors cursor-pointer"
-                    >
-                      Invoice
-                    </button>
+              {filteredSales.length === 0 ? (
+                <tr>
+                  <td colSpan={10} className="py-12 text-center text-slate-500">
+                    <div className="flex flex-col items-center justify-center">
+                      <FileText className="w-8 h-8 text-slate-300 mb-2" />
+                      <p className="text-sm font-semibold text-slate-700">No sales recorded yet</p>
+                      <p className="text-xs text-slate-400 mt-0.5">Click "+ Record Sale" to record your first dispatch order in Firebase.</p>
+                    </div>
                   </td>
                 </tr>
-              ))}
+              ) : (
+                filteredSales.slice(0, 7).map((sale) => (
+                  <tr key={sale.id} className="hover:bg-slate-50/80 transition-colors">
+                    <td className="py-3 px-3 font-mono font-bold text-slate-900">
+                      {sale.invoiceNo}
+                    </td>
+                    <td className="py-3 px-3 text-slate-500 font-mono">
+                      {sale.date}
+                    </td>
+                    <td className="py-3 px-3 font-semibold text-slate-800">
+                      {sale.customerName}
+                    </td>
+                    <td className="py-3 px-3 text-slate-600">
+                      {sale.category}
+                    </td>
+                    <td className="py-3 px-3 text-slate-900 font-semibold max-w-[180px] truncate">
+                      {sale.itemDescription}
+                    </td>
+                    <td className="py-3 px-3 text-right font-mono tabular-nums text-slate-700">
+                      {sale.quantity} {sale.unit}
+                    </td>
+                    <td className="py-3 px-3 text-right font-mono font-bold tabular-nums text-slate-900">
+                      {formatINR(sale.totalAmount)}
+                    </td>
+                    <td className="py-3 px-3">
+                      <span
+                        className={`text-[10px] font-semibold px-2 py-0.5 rounded border ${
+                          sale.paymentStatus === 'Paid'
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            : sale.paymentStatus === 'Partial'
+                            ? 'bg-amber-50 text-amber-700 border-amber-200'
+                            : 'bg-rose-50 text-rose-700 border-rose-200'
+                        }`}
+                      >
+                        {sale.paymentStatus}
+                      </span>
+                    </td>
+                    <td className="py-3 px-3">
+                      <span className="text-[11px] text-slate-600 font-medium flex items-center gap-1">
+                        {sale.status === 'In Transit' ? (
+                          <>
+                            <Truck className="w-3 h-3 text-blue-600" />
+                            <span>In Transit</span>
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                            <span>Delivered</span>
+                          </>
+                        )}
+                      </span>
+                    </td>
+                    <td className="py-3 px-3 text-right">
+                      <button
+                        onClick={() => onViewInvoice(sale)}
+                        className="px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:text-slate-950 bg-slate-100 hover:bg-slate-200 rounded transition-colors cursor-pointer"
+                      >
+                        Invoice
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

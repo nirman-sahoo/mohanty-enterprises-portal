@@ -1,0 +1,112 @@
+{
+  "entities": {
+    "inventoryItem": {
+      "title": "Inventory Item",
+      "description": "Wholesale catalog item for Cement, TMT Rods, Fertilizers, and Asbestos",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 100 },
+        "category": { "type": "string", "enum": ["CEMENT", "SCAN TMT BAR", "FERTILIZER", "Asbestos"] },
+        "stockLevel": { "type": "number" },
+        "unit": { "type": "string", "enum": ["Bags", "Tons", "KG", "Pcs", "CFT", "Bags/Bottles"] },
+        "reorderLevel": { "type": "number" },
+        "unitPrice": { "type": "number" },
+        "hsnCode": { "type": "string", "maxLength": 20 },
+        "isCriticalLow": { "type": "boolean" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["name", "category", "stockLevel", "unit", "unitPrice"]
+    },
+    "orderRecord": {
+      "title": "Commercial Order Record",
+      "description": "B2B wholesale order and invoice record",
+      "type": "object",
+      "properties": {
+        "orderNo": { "type": "string", "maxLength": 50 },
+        "invoiceNo": { "type": "string", "maxLength": 50 },
+        "customerName": { "type": "string", "maxLength": 150 },
+        "shipToAddress": { "type": "string", "maxLength": 250 },
+        "customerPhone": { "type": "string", "maxLength": 30 },
+        "date": { "type": "string", "maxLength": 20 },
+        "time": { "type": "string", "maxLength": 20 },
+        "category": { "type": "string", "maxLength": 50 },
+        "itemDescription": { "type": "string", "maxLength": 150 },
+        "quantity": { "type": "number" },
+        "unit": { "type": "string", "maxLength": 20 },
+        "unitPrice": { "type": "number" },
+        "subtotal": { "type": "number" },
+        "isGst": { "type": "boolean" },
+        "gstAmount": { "type": "number" },
+        "totalAmount": { "type": "number" },
+        "status": { "type": "string", "enum": ["Pending Verification", "Confirmed", "In Transit", "Delivered", "Cancelled"] },
+        "paymentStatus": { "type": "string", "enum": ["Paid", "Credit", "Partial"] },
+        "truckNumber": { "type": "string", "maxLength": 30 }
+      },
+      "required": ["orderNo", "invoiceNo", "customerName", "totalAmount", "status", "paymentStatus"]
+    },
+    "customerLedger": {
+      "title": "Customer Ledger Record",
+      "description": "Party master record and Khatabook credit balance",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 150 },
+        "gstin": { "type": "string", "maxLength": 30 },
+        "phone": { "type": "string", "maxLength": 30 },
+        "address": { "type": "string", "maxLength": 250 },
+        "shipToAddress": { "type": "string", "maxLength": 250 },
+        "totalBilled": { "type": "number" },
+        "totalPaid": { "type": "number" },
+        "outstandingReceivable": { "type": "number" },
+        "totalOverdue": { "type": "number" },
+        "creditLimit": { "type": "number" },
+        "creditDays": { "type": "number" },
+        "lastPaymentDate": { "type": "string", "maxLength": 20 },
+        "lastTransactionDate": { "type": "string", "maxLength": 20 },
+        "averageCollectionDays": { "type": "number" },
+        "oldestDueDays": { "type": "number" },
+        "nextFollowUpDate": { "type": "string", "maxLength": 20 },
+        "followUpNote": { "type": "string", "maxLength": 300 },
+        "promisesToPay": { "type": "string", "maxLength": 300 }
+      },
+      "required": ["name", "phone", "totalBilled", "totalPaid", "outstandingReceivable"]
+    },
+    "moneyReceipt": {
+      "title": "Money Receipt Record",
+      "description": "Official cash/bank money receipt voucher",
+      "type": "object",
+      "properties": {
+        "receiptNo": { "type": "string", "maxLength": 50 },
+        "date": { "type": "string", "maxLength": 20 },
+        "partyName": { "type": "string", "maxLength": 150 },
+        "partyAddress": { "type": "string", "maxLength": 250 },
+        "partyPhone": { "type": "string", "maxLength": 30 },
+        "amount": { "type": "number" },
+        "amountInWords": { "type": "string", "maxLength": 300 },
+        "paymentMode": { "type": "string", "enum": ["Cash", "RTGS / NEFT", "UPI / QR", "Cheque / DD"] },
+        "forAccount": { "type": "string", "maxLength": 150 },
+        "paidAmount": { "type": "number" },
+        "dueAmount": { "type": "number" },
+        "referenceNo": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["receiptNo", "partyName", "amount", "paymentMode"]
+    }
+  },
+  "firestore": {
+    "/inventory/{itemId}": {
+      "schema": { "$ref": "#/entities/inventoryItem" },
+      "description": "Warehouse stock levels and verified wholesale catalog"
+    },
+    "/orders/{orderId}": {
+      "schema": { "$ref": "#/entities/orderRecord" },
+      "description": "B2B sales and multi-item commercial orders"
+    },
+    "/ledgers/{ledgerId}": {
+      "schema": { "$ref": "#/entities/customerLedger" },
+      "description": "Khatabook contractor directory and credit ledger"
+    },
+    "/money_receipts/{receiptId}": {
+      "schema": { "$ref": "#/entities/moneyReceipt" },
+      "description": "Official payment receipt vouchers with amount in words"
+    }
+  }
+}

@@ -206,8 +206,19 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-medium">
-              {filteredLedgers.map((party) => (
-                <tr key={party.id} className="hover:bg-slate-50/90 transition-colors">
+              {filteredLedgers.length === 0 ? (
+                <tr>
+                  <td colSpan={10} className="py-12 text-center text-slate-500">
+                    <div className="flex flex-col items-center justify-center">
+                      <BookOpen className="w-8 h-8 text-slate-300 mb-2" />
+                      <p className="text-sm font-semibold text-slate-700">No contractor ledger accounts found</p>
+                      <p className="text-xs text-slate-400 mt-0.5">Contractor accounts will appear here automatically when sales and billing records are created.</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                filteredLedgers.map((party) => (
+                  <tr key={party.id} className="hover:bg-slate-50/90 transition-colors">
                   {/* Company Name */}
                   <td className="py-3 px-3.5 font-bold text-slate-900 max-w-[190px]">
                     <button
@@ -321,7 +332,8 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
                     </div>
                   </td>
                 </tr>
-              ))}
+                ))
+              )}
             </tbody>
           </table>
         </div>

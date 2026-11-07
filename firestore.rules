@@ -1,0 +1,90 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default-deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Connection testing
+    match /test/{docId} {
+      allow read: if true;
+    }
+
+    // Helper functions
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidInventory(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() <= 120 &&
+             data.category is string &&
+             data.stockLevel is number &&
+             data.unit is string &&
+             data.unitPrice is number;
+    }
+
+    function isValidOrder(data) {
+      return data.orderNo is string && data.orderNo.size() <= 64 &&
+             data.invoiceNo is string && data.invoiceNo.size() <= 64 &&
+             data.customerName is string && data.customerName.size() <= 160 &&
+             data.totalAmount is number &&
+             data.status is string &&
+             data.paymentStatus is string;
+    }
+
+    function isValidLedger(data) {
+      return data.name is string && data.name.size() <= 160 &&
+             data.totalBilled is number &&
+             data.totalPaid is number &&
+             data.outstandingReceivable is number;
+    }
+
+    function isValidReceipt(data) {
+      return data.receiptNo is string && data.receiptNo.size() <= 64 &&
+             data.partyName is string && data.partyName.size() <= 160 &&
+             data.amount is number &&
+             data.paymentMode is string;
+    }
+
+    // Master Inventory Catalog & Stock
+    match /inventory/{itemId} {
+      allow read: if true;
+      allow create: if isValidId(itemId) && isValidInventory(incoming());
+      allow update: if isValidId(itemId) && isValidInventory(incoming());
+      allow delete: if false;
+    }
+
+    // Commercial Orders & Invoices
+    match /orders/{orderId} {
+      allow read: if true;
+      allow create: if isValidId(orderId) && isValidOrder(incoming());
+      allow update: if isValidId(orderId) && isValidOrder(incoming());
+      allow delete: if false;
+    }
+
+    // Khatabook Party Directory & Balances
+    match /ledgers/{ledgerId} {
+      allow read: if true;
+      allow create: if isValidId(ledgerId) && isValidLedger(incoming());
+      allow update: if isValidId(ledgerId) && isValidLedger(incoming());
+      allow delete: if false;
+    }
+
+    // Official Payment Receipt Vouchers
+    match /money_receipts/{receiptId} {
+      allow read: if true;
+      allow create: if isValidId(receiptId) && isValidReceipt(incoming());
+      allow update: if isValidId(receiptId) && isValidReceipt(incoming());
+      allow delete: if false;
+    }
+  }
+}

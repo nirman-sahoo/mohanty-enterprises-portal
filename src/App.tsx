@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { LoginScreen } from './components/LoginScreen';
 import { Sidebar, NavTab } from './components/Sidebar';
 import { Header } from './components/Header';
@@ -12,11 +12,6 @@ import { LedgerView } from './components/LedgerView';
 import { MoneyReceiptModal } from './components/MoneyReceiptModal';
 import { PartyStatementModal } from './components/PartyStatementModal';
 import { 
-  INITIAL_INVENTORY, 
-  INITIAL_SALES, 
-  INITIAL_LEDGERS 
-} from './data/inventoryData';
-import { 
   InventoryItem, 
   SaleRecord, 
   CustomerLedger, 
@@ -24,6 +19,18 @@ import {
   StatementEntry 
 } from './types';
 import { numberToIndianWords } from './utils/formatters';
+import { testConnection } from './firebase/config';
+import { 
+  subscribeToInventory, 
+  subscribeToOrders, 
+  subscribeToLedgers,
+  createOrderInDb,
+  restockItemInDb,
+  recordPaymentInDb,
+  updateFollowUpInDb,
+  addStatementEntryInDb,
+  updateOrderGstInDb
+} from './services/firebaseService';
 
 export default function App() {
   // Authentication state (Default initial view is Login Screen)
@@ -33,10 +40,11 @@ export default function App() {
   // Navigation tab state
   const [activeTab, setActiveTab] = useState<NavTab>('overview');
 
-  // Business state
-  const [inventory, setInventory] = useState<InventoryItem[]>(INITIAL_INVENTORY);
-  const [sales, setSales] = useState<SaleRecord[]>(INITIAL_SALES);
-  const [ledgers, setLedgers] = useState<CustomerLedger[]>(INITIAL_LEDGERS);
+  // Live Firebase state (clean production data, no mock records)
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [sales, setSales] = useState<SaleRecord[]>([]);
+  const [ledgers, setLedgers] = useState<CustomerLedger[]>([]);
+  const [isDbLoading, setIsDbLoading] = useState<boolean>(true);
 
   // Modals state
   const [isRecordSaleModalOpen, setIsRecordSaleModalOpen] = useState<boolean>(false);
@@ -44,129 +52,47 @@ export default function App() {
   const [selectedReceiptForModal, setSelectedReceiptForModal] = useState<MoneyReceipt | null>(null);
   const [selectedLedgerForStatement, setSelectedLedgerForStatement] = useState<CustomerLedger | null>(null);
 
-  // Record Sale Handler (supports multi-item order, deducts stock, updates ledger, opens invoice)
-  const handleRecordSale = (newSale: SaleRecord) => {
-    // 1. Add to sales list
-    setSales((prev) => [newSale, ...prev]);
+  // Initialize live Firestore listeners
+  useEffect(() => {
+    testConnection();
 
-    // 2. Deduct all line items from inventory
-    setInventory((prev) =>
-      prev.map((item) => {
-        const soldInOrder = newSale.items && newSale.items.length > 0
-          ? newSale.items.filter((it) => it.itemDescription === item.name)
-          : (newSale.itemDescription === item.name ? [{ quantity: newSale.quantity }] : []);
-
-        if (soldInOrder.length > 0) {
-          const totalQtySold = soldInOrder.reduce((acc, it) => acc + (it.quantity || 0), 0);
-          const newStock = Math.max(0, Number((item.stockLevel - totalQtySold).toFixed(2)));
-          return {
-            ...item,
-            stockLevel: newStock,
-            isCriticalLow: newStock <= item.reorderLevel,
-          };
-        }
-        return item;
-      })
-    );
-
-    // 3. Update customer ledger & statement entries
-    setLedgers((prev) => {
-      const existing = prev.find((l) => l.name.toLowerCase() === newSale.customerName.toLowerCase());
-      const itemQtySummary = newSale.items && newSale.items.length > 0
-        ? newSale.items.map((it) => `${it.itemDescription} (${it.quantity} ${it.unit})`).join(', ')
-        : `${newSale.itemDescription} (${newSale.quantity} ${newSale.unit})`;
-
-      if (existing) {
-        const newStatementEntry: StatementEntry = {
-          id: `st-${Date.now()}`,
-          date: newSale.date,
-          voucherType: 'Sales',
-          details: `Bill #${newSale.invoiceNo} · Dispatched via ${newSale.truckNumber || 'Fleet'}`,
-          itemQty: itemQtySummary,
-          debit: newSale.totalAmount,
-          credit: 0,
-          balance: existing.outstandingReceivable + newSale.totalAmount,
-          balanceType: 'Dr',
-        };
-
-        return prev.map((l) =>
-          l.id === existing.id
-            ? {
-                ...l,
-                totalBilled: l.totalBilled + newSale.totalAmount,
-                outstandingReceivable:
-                  newSale.paymentStatus === 'Credit'
-                    ? l.outstandingReceivable + newSale.totalAmount
-                    : newSale.paymentStatus === 'Partial'
-                    ? l.outstandingReceivable + newSale.totalAmount * 0.5
-                    : l.outstandingReceivable,
-                totalOverdue:
-                  newSale.paymentStatus === 'Credit'
-                    ? l.totalOverdue + newSale.totalAmount
-                    : l.totalOverdue,
-                lastTransactionDate: newSale.date,
-                statementEntries: [...l.statementEntries, newStatementEntry],
-              }
-            : l
-        );
-      } else {
-        const newStatementEntry: StatementEntry = {
-          id: `st-${Date.now()}`,
-          date: newSale.date,
-          voucherType: 'Sales',
-          details: `Bill #${newSale.invoiceNo}`,
-          itemQty: itemQtySummary,
-          debit: newSale.totalAmount,
-          credit: 0,
-          balance: newSale.totalAmount,
-          balanceType: 'Dr',
-        };
-
-        const newLedger: CustomerLedger = {
-          id: `led-${Date.now()}`,
-          name: newSale.customerName,
-          gstin: '21AAPCM' + Math.floor(1000 + Math.random() * 9000) + 'A1Z' + Math.floor(1 + Math.random() * 9),
-          phone: newSale.customerPhone || '+91 94370 28190',
-          address: newSale.shipToAddress || 'Commercial Yard, Odisha',
-          shipToAddress: newSale.shipToAddress,
-          totalBilled: newSale.totalAmount,
-          totalPaid: newSale.paymentStatus === 'Paid' ? newSale.totalAmount : 0,
-          outstandingReceivable: newSale.paymentStatus === 'Credit' ? newSale.totalAmount : 0,
-          totalOverdue: newSale.paymentStatus === 'Credit' ? newSale.totalAmount : 0,
-          creditLimit: 1500000,
-          creditDays: 30,
-          lastPaymentDate: newSale.date,
-          lastTransactionDate: newSale.date,
-          averageCollectionDays: 15,
-          oldestDueDays: 1,
-          statementEntries: [newStatementEntry],
-        };
-        return [newLedger, ...prev];
-      }
+    const unsubInventory = subscribeToInventory((items) => {
+      setInventory(items);
+      setIsDbLoading(false);
     });
 
-    // 4. Open Tax Invoice Modal immediately for the newly recorded sale
+    const unsubOrders = subscribeToOrders((orders) => {
+      setSales(orders);
+    });
+
+    const unsubLedgers = subscribeToLedgers((parties) => {
+      setLedgers(parties);
+    });
+
+    return () => {
+      unsubInventory();
+      unsubOrders();
+      unsubLedgers();
+    };
+  }, []);
+
+  // Record Sale Handler (writes to live Firestore, deducts inventory, syncs ledger)
+  const handleRecordSale = async (newSale: SaleRecord) => {
+    // 1. Optimistically update local modal immediately
     setSelectedInvoiceForModal(newSale);
+
+    // 2. Persist to live Firestore database
+    await createOrderInDb(newSale, inventory, ledgers);
   };
 
-  // Restock inventory handler
-  const handleRestockItem = (itemId: string, addQuantity: number) => {
-    setInventory((prev) =>
-      prev.map((item) => {
-        if (item.id === itemId) {
-          const updatedStock = Number((item.stockLevel + addQuantity).toFixed(2));
-          return {
-            ...item,
-            stockLevel: updatedStock,
-            isCriticalLow: updatedStock <= item.reorderLevel,
-          };
-        }
-        return item;
-      })
-    );
+  // Restock inventory handler (writes live to Firestore)
+  const handleRestockItem = async (itemId: string, addQuantity: number) => {
+    const item = inventory.find((i) => i.id === itemId);
+    if (!item) return;
+    await restockItemInDb(itemId, addQuantity, item.stockLevel, item.reorderLevel);
   };
 
-  // Open Receive Payment and generate official Money Receipt (PDF Page 2)
+  // Open Receive Payment and generate official Money Receipt
   const handleOpenReceivePayment = (party: CustomerLedger) => {
     const defaultAmount = Math.min(party.outstandingReceivable, 150000) || 50000;
     const receiptNo = `MR-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -190,97 +116,30 @@ export default function App() {
 
     setSelectedReceiptForModal(newReceipt);
 
-    // Update ledger balances & statement
-    setLedgers((prev) =>
-      prev.map((ledger) => {
-        if (ledger.id === party.id) {
-          const newOutstanding = Math.max(0, ledger.outstandingReceivable - defaultAmount);
-          const newStatementEntry: StatementEntry = {
-            id: `st-${Date.now()}`,
-            date: today,
-            voucherType: 'Payment',
-            details: `Receipt #${receiptNo} via RTGS / NEFT`,
-            itemQty: '-',
-            debit: 0,
-            credit: defaultAmount,
-            balance: newOutstanding,
-            balanceType: 'Dr',
-          };
-
-          return {
-            ...ledger,
-            totalPaid: ledger.totalPaid + defaultAmount,
-            outstandingReceivable: newOutstanding,
-            totalOverdue: Math.max(0, (ledger.totalOverdue || 0) - defaultAmount),
-            lastPaymentDate: today,
-            statementEntries: [...ledger.statementEntries, newStatementEntry],
-          };
-        }
-        return ledger;
-      })
-    );
+    // Persist to live Firestore
+    recordPaymentInDb(newReceipt, party);
   };
 
   // Add manual transaction to party Khatabook statement
-  const handleAddTransactionToLedger = (ledgerId: string, entry: Omit<StatementEntry, 'id'>) => {
-    const fullEntry: StatementEntry = {
-      ...entry,
-      id: `st-${Date.now()}`,
-    };
-
-    setLedgers((prev) =>
-      prev.map((l) => {
-        if (l.id === ledgerId) {
-          const updatedEntries = [...l.statementEntries, fullEntry];
-          const newOutstanding = entry.debit > 0
-            ? l.outstandingReceivable + entry.debit
-            : Math.max(0, l.outstandingReceivable - entry.credit);
-
-          return {
-            ...l,
-            outstandingReceivable: newOutstanding,
-            statementEntries: updatedEntries,
-            lastTransactionDate: entry.date,
-          };
-        }
-        return l;
-      })
-    );
+  const handleAddTransactionToLedger = async (ledgerId: string, entry: Omit<StatementEntry, 'id'>) => {
+    const ledger = ledgers.find((l) => l.id === ledgerId);
+    if (!ledger) return;
+    await addStatementEntryInDb(ledger, entry);
   };
 
   // Update follow-up date and remarks in Khatabook single-format ledger
-  const handleUpdateFollowUp = (ledgerId: string, nextFollowUpDate: string, note: string) => {
-    setLedgers((prev) =>
-      prev.map((l) =>
-        l.id === ledgerId
-          ? {
-              ...l,
-              nextFollowUpDate,
-              followUpNote: note,
-              promisesToPay: note,
-            }
-          : l
-      )
-    );
+  const handleUpdateFollowUp = async (ledgerId: string, nextFollowUpDate: string, note: string) => {
+    await updateFollowUpInDb(ledgerId, nextFollowUpDate, note);
   };
 
   // Update GST state on invoice
-  const handleUpdateGst = (saleId: string, isGst: boolean) => {
-    setSales((prev) =>
-      prev.map((s) => {
-        if (s.id === saleId) {
-          const subtotal = s.subtotal || s.totalAmount;
-          const gstAmount = isGst ? Math.round(subtotal * 0.18) : 0;
-          return {
-            ...s,
-            isGst,
-            gstAmount,
-            totalAmount: isGst ? subtotal + gstAmount : subtotal,
-          };
-        }
-        return s;
-      })
-    );
+  const handleUpdateGst = async (saleId: string, isGst: boolean) => {
+    const sale = sales.find((s) => s.id === saleId);
+    if (!sale) return;
+    const subtotal = sale.subtotal || sale.totalAmount;
+    const gstAmount = isGst ? Math.round(subtotal * 0.18) : 0;
+    const totalAmount = isGst ? subtotal + gstAmount : subtotal;
+    await updateOrderGstInDb(saleId, isGst, subtotal, gstAmount, totalAmount);
   };
 
   // 1. LOGIN SCREEN (Default Initial View)
@@ -321,6 +180,7 @@ export default function App() {
               <DashboardView
                 inventory={inventory}
                 sales={sales}
+                ledgers={ledgers}
                 onOpenRecordSale={() => setIsRecordSaleModalOpen(true)}
                 onViewInvoice={(sale) => setSelectedInvoiceForModal(sale)}
                 onNavigateToTab={(tab) => setActiveTab(tab)}
@@ -385,20 +245,20 @@ export default function App() {
         onRecordSale={handleRecordSale}
       />
 
-      {/* Commercial Tax / Estimate Invoice Modal (with GST toggle and Compact Thermal Slip view) */}
+      {/* Commercial Tax / Estimate Invoice Modal */}
       <InvoiceModal
         sale={selectedInvoiceForModal}
         onClose={() => setSelectedInvoiceForModal(null)}
         onUpdateGst={handleUpdateGst}
       />
 
-      {/* Official Money Receipt Modal (Page 2) */}
+      {/* Official Money Receipt Modal */}
       <MoneyReceiptModal
         receipt={selectedReceiptForModal}
         onClose={() => setSelectedReceiptForModal(null)}
       />
 
-      {/* Detailed Khatabook Party Statement Modal (Page 4) */}
+      {/* Detailed Khatabook Party Statement Modal */}
       <PartyStatementModal
         ledger={selectedLedgerForStatement}
         onClose={() => setSelectedLedgerForStatement(null)}
