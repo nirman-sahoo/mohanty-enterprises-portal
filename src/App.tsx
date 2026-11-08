@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { LoginScreen } from './components/LoginScreen';
 import { Sidebar, NavTab } from './components/Sidebar';
 import { Header } from './components/Header';
+import { Footer } from './components/Footer';
 import { DashboardView } from './components/DashboardView';
 import { SaleEntryForm } from './components/SaleEntryForm';
 import { SaleEntryModal } from './components/SaleEntryModal';
@@ -157,7 +158,7 @@ export default function App() {
 
   // 2. AUTHENTICATED LAYOUT
   return (
-    <div className="flex h-screen w-full bg-slate-100 overflow-hidden font-sans text-slate-900">
+    <div className="flex h-screen w-full bg-[#F4F6F9] overflow-hidden font-sans text-slate-900">
       {/* Sidebar: Dark slate left navigation bar */}
       <Sidebar
         activeTab={activeTab}
@@ -167,15 +168,16 @@ export default function App() {
 
       {/* Main Workspace Frame */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Top Header: Clean white bar */}
+        {/* Top Header matching overview.jpeg */}
         <Header
           activeTab={activeTab}
           onOpenRecordSale={() => setIsRecordSaleModalOpen(true)}
           operatorName={operatorName}
+          onSignOut={() => setIsAuthenticated(false)}
         />
 
         {/* Scrollable Content Viewport */}
-        <main className="flex-1 overflow-y-auto p-6 md:p-8">
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-7 bg-[#F4F6F9]">
           <div className="max-w-7xl mx-auto">
             {activeTab === 'overview' && (
               <DashboardView
@@ -240,6 +242,9 @@ export default function App() {
             )}
           </div>
         </main>
+
+        {/* Global Persistent Footer matching overview.jpeg */}
+        <Footer />
       </div>
 
       {/* Sale / Order Entry Modal */}
