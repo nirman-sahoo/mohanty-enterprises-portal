@@ -67,25 +67,25 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
         <div className="w-full h-full bg-white rounded-[18px] sm:rounded-[24px] md:rounded-[28px] lg:rounded-[34px] border-[2px] lg:border-[2.5px] border-[#F5A623] shadow-2xl p-[3.5%] sm:p-[4%] lg:p-[4.5%] flex flex-col justify-between overflow-hidden">
           {/* Top Brand Header inside Card */}
           <div className="text-center">
-            {/* Gold Medallion Emblem */}
-            <div className="flex justify-center mb-1 lg:mb-1.5">
+            {/* Gold Medallion Emblem - using user's uploaded images/logo.png */}
+            <div className="flex justify-center mb-2 lg:mb-2.5">
               <img 
-                src="/assets/aistudio/mohanty_emblem_transparent.png" 
+                src="/images/logo.png" 
                 alt="Mohanty Enterprises Emblem" 
-                className="w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 lg:w-18 lg:h-18 xl:w-20 xl:h-20 max-h-[16%] object-contain drop-shadow"
+                className="w-18 h-18 sm:w-20 sm:h-20 md:w-22 md:h-22 lg:w-24 lg:h-24 xl:w-26 xl:h-26 object-contain rounded-full drop-shadow-md transition-all"
               />
             </div>
 
             {/* Company Title */}
-            <h2 className="text-xs sm:text-sm md:text-base lg:text-lg xl:text-xl font-black text-[#0B1D3A] tracking-wide font-sans">
+            <h2 className="text-base sm:text-lg md:text-xl lg:text-2xl font-black text-[#0B1D3A] tracking-wide font-sans">
               MOHANTY ENTERPRISES
             </h2>
 
             {/* Subtitle with Golden Horizontal Accents */}
-            <div className="flex items-center justify-center gap-1 sm:gap-1.5 lg:gap-2 text-[8px] sm:text-[9px] md:text-[9.5px] lg:text-[10.5px] font-bold text-slate-700 tracking-wider uppercase mt-0.5 mb-1.5 sm:mb-2 lg:mb-3">
-              <span className="h-[1.5px] w-4 sm:w-6 lg:w-8 bg-[#F5A623]"></span>
+            <div className="flex items-center justify-center gap-1.5 sm:gap-2 text-[8.5px] sm:text-[9.5px] md:text-[10px] lg:text-[11px] font-bold text-slate-700 tracking-wider uppercase mt-1 mb-3 sm:mb-4 lg:mb-5">
+              <span className="h-[1.5px] w-5 sm:w-7 lg:w-9 bg-[#F5A623]"></span>
               <span className="truncate">CEMENT • STEEL • CONSTRUCTION MATERIALS</span>
-              <span className="h-[1.5px] w-4 sm:w-6 lg:w-8 bg-[#F5A623]"></span>
+              <span className="h-[1.5px] w-5 sm:w-7 lg:w-9 bg-[#F5A623]"></span>
             </div>
           </div>
 
