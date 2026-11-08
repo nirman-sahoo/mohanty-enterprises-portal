@@ -5,11 +5,12 @@ import {
   FileText, 
   Boxes, 
   BookOpen, 
+  Users,
   LogOut,
   Building2
 } from 'lucide-react';
 
-export type NavTab = 'overview' | 'new-sale' | 'invoices' | 'inventory' | 'ledger';
+export type NavTab = 'overview' | 'new-sale' | 'invoices' | 'inventory' | 'ledger' | 'hr-payroll';
 
 interface SidebarProps {
   activeTab: NavTab;
@@ -28,6 +29,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'invoices', label: 'Invoices', icon: FileText },
     { id: 'inventory', label: 'Inventory', icon: Boxes },
     { id: 'ledger', label: 'Khatabook Ledger', icon: BookOpen },
+    { id: 'hr-payroll', label: 'HR & Payroll', icon: Users },
   ];
 
   return (

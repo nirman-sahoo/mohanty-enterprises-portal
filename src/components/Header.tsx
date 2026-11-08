@@ -41,6 +41,8 @@ export const Header: React.FC<HeaderProps> = ({
         return 'Material Inventory';
       case 'ledger':
         return 'Party Accounts & Khatabook Ledger';
+      case 'hr-payroll':
+        return 'HR Management & Payroll System';
       default:
         return 'Overview';
     }

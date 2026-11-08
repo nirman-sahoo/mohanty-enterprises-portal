@@ -9,6 +9,7 @@ import { InvoiceModal } from './components/InvoiceModal';
 import { InvoicesView } from './components/InvoicesView';
 import { InventoryView } from './components/InventoryView';
 import { LedgerView } from './components/LedgerView';
+import { HRPayrollView } from './components/hr/HRPayrollView';
 import { MoneyReceiptModal } from './components/MoneyReceiptModal';
 import { PartyStatementModal } from './components/PartyStatementModal';
 import { 
@@ -232,6 +233,10 @@ export default function App() {
                 onUpdateFollowUp={handleUpdateFollowUp}
                 onOpenRecordSale={() => setIsRecordSaleModalOpen(true)}
               />
+            )}
+
+            {activeTab === 'hr-payroll' && (
+              <HRPayrollView />
             )}
           </div>
         </main>

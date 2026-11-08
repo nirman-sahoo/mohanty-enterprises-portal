@@ -107,3 +107,73 @@ export interface CustomerLedger {
   promisesToPay?: string;
   statementEntries: StatementEntry[];
 }
+
+export type Department = 'Accounts' | 'Sales' | 'HR' | 'Admin' | 'Warehouse / Yard' | 'Logistics';
+
+export type EmployeeStatus = 'Active' | 'On Leave' | 'Inactive';
+
+export interface Employee {
+  id: string;
+  empCode: string;
+  name: string;
+  department: Department;
+  designation: string;
+  phone: string;
+  email: string;
+  joiningDate: string;
+  monthlySalary: number; // in ₹
+  bankAccount: string;
+  bankIfsc: string;
+  panNo: string;
+  status: EmployeeStatus;
+}
+
+export type AttendanceStatus = 'Present' | 'Absent' | 'On Leave' | 'Half Day';
+
+export interface AttendanceRecord {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  department: Department;
+  date: string; // YYYY-MM-DD
+  status: AttendanceStatus;
+  checkInTime?: string;
+  checkOutTime?: string;
+  notes?: string;
+}
+
+export type LeaveType = 'Casual' | 'Sick' | 'Earned';
+export type LeaveStatus = 'Pending' | 'Approved' | 'Rejected';
+
+export interface LeaveRequest {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  department: Department;
+  leaveType: LeaveType;
+  startDate: string;
+  endDate: string;
+  days: number;
+  reason: string;
+  status: LeaveStatus;
+  appliedOn: string;
+}
+
+export interface PayrollRecord {
+  id: string;
+  month: string; // YYYY-MM
+  employeeId: string;
+  employeeName: string;
+  department: Department;
+  designation: string;
+  basicSalary: number;
+  allowances: number;
+  pfDeduction: number;
+  taxDeduction: number;
+  netSalary: number;
+  paymentStatus: 'Paid' | 'Processing' | 'Pending';
+  paymentDate?: string;
+  bankReference?: string;
+}
+
+export type HRSubTab = 'overview' | 'employee' | 'attendance' | 'payroll' | 'leave' | 'reports';

@@ -19,7 +19,15 @@ import {
   MoneyReceipt, 
   StatementEntry,
   Category,
-  UnitType 
+  UnitType,
+  Employee,
+  AttendanceRecord,
+  LeaveRequest,
+  PayrollRecord,
+  LeaveStatus,
+  Department,
+  EmployeeStatus,
+  AttendanceStatus,
 } from '../types';
 import { CATEGORIES, CATEGORY_ITEMS } from '../data/inventoryData';
 
@@ -417,3 +425,459 @@ export async function updateOrderGstInDb(orderId: string, isGst: boolean, subtot
     handleFirestoreError(err, OperationType.UPDATE, path);
   }
 }
+
+// ==========================================
+// HR & PAYROLL MANAGEMENT SERVICES
+// ==========================================
+
+export const INITIAL_EMPLOYEES: Employee[] = [
+  {
+    id: 'emp-1',
+    empCode: 'ME-ACC-01',
+    name: 'Rajesh Kumar',
+    department: 'Accounts',
+    designation: 'Senior Accounts Officer',
+    phone: '+91 94371 10293',
+    email: 'rajesh.kumar@mohantyenterprises.in',
+    joiningDate: '2021-04-15',
+    monthlySalary: 38000,
+    bankAccount: '918237461928',
+    bankIfsc: 'SBIN0001244',
+    panNo: 'BKRPK9182A',
+    status: 'Active',
+  },
+  {
+    id: 'emp-2',
+    empCode: 'ME-SAL-01',
+    name: 'Amit Das',
+    department: 'Sales',
+    designation: 'Wholesale Sales Manager',
+    phone: '+91 98610 84729',
+    email: 'amit.das@mohantyenterprises.in',
+    joiningDate: '2019-11-01',
+    monthlySalary: 52000,
+    bankAccount: '109283746192',
+    bankIfsc: 'HDFC0000452',
+    panNo: 'ADMPD8291B',
+    status: 'Active',
+  },
+  {
+    id: 'emp-3',
+    empCode: 'ME-HR-01',
+    name: 'Suresh Patel',
+    department: 'HR',
+    designation: 'HR & Operations Lead',
+    phone: '+91 94372 99182',
+    email: 'suresh.patel@mohantyenterprises.in',
+    joiningDate: '2022-01-10',
+    monthlySalary: 35000,
+    bankAccount: '887291029384',
+    bankIfsc: 'ICIC0001928',
+    panNo: 'SPYPP1928C',
+    status: 'Active',
+  },
+  {
+    id: 'emp-4',
+    empCode: 'ME-ADM-01',
+    name: 'Rakesh Mohanty',
+    department: 'Admin',
+    designation: 'General Administration Head',
+    phone: '+91 98612 00192',
+    email: 'rakesh.mohanty@mohantyenterprises.in',
+    joiningDate: '2018-03-20',
+    monthlySalary: 65000,
+    bankAccount: '201928374619',
+    bankIfsc: 'UTIB0000219',
+    panNo: 'RMKPM9918D',
+    status: 'On Leave',
+  },
+  {
+    id: 'emp-5',
+    empCode: 'ME-YRD-01',
+    name: 'Manoj Swain',
+    department: 'Warehouse / Yard',
+    designation: 'Cement Godown Supervisor',
+    phone: '+91 97781 29481',
+    email: 'manoj.swain@mohantyenterprises.in',
+    joiningDate: '2020-08-15',
+    monthlySalary: 32000,
+    bankAccount: '445392817293',
+    bankIfsc: 'PUNB0192800',
+    panNo: 'MSWPK8821E',
+    status: 'Active',
+  },
+  {
+    id: 'emp-6',
+    empCode: 'ME-YRD-02',
+    name: 'Bipin Rout',
+    department: 'Warehouse / Yard',
+    designation: 'SCAN TMT Bar Yard Foreman',
+    phone: '+91 94373 88192',
+    email: 'bipin.rout@mohantyenterprises.in',
+    joiningDate: '2021-02-18',
+    monthlySalary: 34000,
+    bankAccount: '556192837461',
+    bankIfsc: 'SBIN0008392',
+    panNo: 'BROUT7729F',
+    status: 'Active',
+  },
+  {
+    id: 'emp-7',
+    empCode: 'ME-LOG-01',
+    name: 'Dinabandhu Jena',
+    department: 'Logistics',
+    designation: 'Dispatch & Fleet Coordinator',
+    phone: '+91 98614 77281',
+    email: 'dinabandhu.jena@mohantyenterprises.in',
+    joiningDate: '2020-05-12',
+    monthlySalary: 42000,
+    bankAccount: '998273619283',
+    bankIfsc: 'CNRB0001928',
+    panNo: 'DJENP6619G',
+    status: 'Active',
+  },
+  {
+    id: 'emp-8',
+    empCode: 'ME-LOG-02',
+    name: 'Santosh Nayak',
+    department: 'Logistics',
+    designation: 'Weighbridge & Truck In-Charge',
+    phone: '+91 97783 66192',
+    email: 'santosh.nayak@mohantyenterprises.in',
+    joiningDate: '2022-06-01',
+    monthlySalary: 30000,
+    bankAccount: '661928374619',
+    bankIfsc: 'UBIN0549281',
+    panNo: 'SNAYK5518H',
+    status: 'Active',
+  },
+  {
+    id: 'emp-9',
+    empCode: 'ME-ACC-02',
+    name: 'Subrat Sahoo',
+    department: 'Accounts',
+    designation: 'GST Billing & E-Waybill Specialist',
+    phone: '+91 94375 11928',
+    email: 'subrat.sahoo@mohantyenterprises.in',
+    joiningDate: '2022-09-15',
+    monthlySalary: 36000,
+    bankAccount: '334192837461',
+    bankIfsc: 'IDIB000K192',
+    panNo: 'SSAHO4419I',
+    status: 'Active',
+  },
+  {
+    id: 'emp-10',
+    empCode: 'ME-ACC-03',
+    name: 'Pradeep Behera',
+    department: 'Accounts',
+    designation: 'Khatabook & Collections Officer',
+    phone: '+91 98616 22918',
+    email: 'pradeep.behera@mohantyenterprises.in',
+    joiningDate: '2021-11-20',
+    monthlySalary: 33000,
+    bankAccount: '771928374619',
+    bankIfsc: 'BARB0BHUBAN',
+    panNo: 'PBEHP3318J',
+    status: 'Active',
+  },
+  {
+    id: 'emp-11',
+    empCode: 'ME-YRD-03',
+    name: 'Kailash Barik',
+    department: 'Warehouse / Yard',
+    designation: 'Fertilizer & Asbestos Depot In-Charge',
+    phone: '+91 97785 44192',
+    email: 'kailash.barik@mohantyenterprises.in',
+    joiningDate: '2023-01-15',
+    monthlySalary: 29000,
+    bankAccount: '112938475619',
+    bankIfsc: 'SBIN0011928',
+    panNo: 'KBARP2219K',
+    status: 'Active',
+  },
+  {
+    id: 'emp-12',
+    empCode: 'ME-SAL-02',
+    name: 'Debasish Mishra',
+    department: 'Sales',
+    designation: 'Contractor Relations Executive',
+    phone: '+91 94378 55192',
+    email: 'debasish.mishra@mohantyenterprises.in',
+    joiningDate: '2023-04-10',
+    monthlySalary: 28000,
+    bankAccount: '991827364519',
+    bankIfsc: 'HDFC0001928',
+    panNo: 'DMISP1119L',
+    status: 'Active',
+  },
+];
+
+/**
+ * Real-time listener for Employee Master.
+ * Auto-seeds core wholesale staff if collection is empty.
+ */
+export function subscribeToEmployees(onData: (employees: Employee[]) => void): () => void {
+  const colPath = 'employees';
+  const colRef = collection(db, colPath);
+
+  getDocs(colRef).then((snapshot) => {
+    if (snapshot.empty) {
+      console.log('Seeding initial wholesale team in Firestore...');
+      INITIAL_EMPLOYEES.forEach(async (emp) => {
+        await setDoc(doc(db, colPath, emp.id), {
+          ...emp,
+          updatedAt: new Date().toISOString(),
+        }).catch((err) => handleFirestoreError(err, OperationType.WRITE, colPath));
+      });
+    }
+  }).catch((err) => {
+    handleFirestoreError(err, OperationType.GET, colPath);
+  });
+
+  return onSnapshot(
+    colRef,
+    (snapshot) => {
+      const emps: Employee[] = snapshot.docs.map((docSnap) => {
+        const d = docSnap.data();
+        return {
+          id: docSnap.id,
+          empCode: d.empCode || `ME-${docSnap.id.slice(-4).toUpperCase()}`,
+          name: d.name || '',
+          department: d.department || 'Admin',
+          designation: d.designation || '',
+          phone: d.phone || '',
+          email: d.email || '',
+          joiningDate: d.joiningDate || '',
+          monthlySalary: Number(d.monthlySalary) || 30000,
+          bankAccount: d.bankAccount || '',
+          bankIfsc: d.bankIfsc || '',
+          panNo: d.panNo || '',
+          status: d.status || 'Active',
+        };
+      });
+      // Sort alphabetically by name
+      emps.sort((a, b) => a.name.localeCompare(b.name));
+      onData(emps);
+    },
+    (err) => {
+      handleFirestoreError(err, OperationType.LIST, colPath);
+    }
+  );
+}
+
+/**
+ * Create or update an employee in Firestore.
+ */
+export async function saveEmployeeInDb(employee: Employee): Promise<void> {
+  const colPath = 'employees';
+  try {
+    await setDoc(doc(db, colPath, employee.id), {
+      ...employee,
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, colPath);
+  }
+}
+
+/**
+ * Real-time listener for Attendance Records for a specific date (YYYY-MM-DD).
+ */
+export function subscribeToAttendance(
+  dateStr: string,
+  onData: (records: AttendanceRecord[]) => void
+): () => void {
+  const colPath = 'attendance_logs';
+  const colRef = collection(db, colPath);
+
+  return onSnapshot(
+    colRef,
+    (snapshot) => {
+      const records: AttendanceRecord[] = snapshot.docs
+        .map((docSnap) => {
+          const d = docSnap.data();
+          return {
+            id: docSnap.id,
+            employeeId: d.employeeId || '',
+            employeeName: d.employeeName || '',
+            department: d.department || 'Admin',
+            date: d.date || '',
+            status: d.status || 'Present',
+            checkInTime: d.checkInTime || '',
+            checkOutTime: d.checkOutTime || '',
+            notes: d.notes || '',
+          };
+        })
+        .filter((r) => r.date === dateStr);
+
+      onData(records);
+    },
+    (err) => {
+      handleFirestoreError(err, OperationType.LIST, colPath);
+    }
+  );
+}
+
+/**
+ * Save single attendance entry.
+ */
+export async function recordAttendanceInDb(record: AttendanceRecord): Promise<void> {
+  const colPath = 'attendance_logs';
+  try {
+    await setDoc(doc(db, colPath, record.id), {
+      ...record,
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, colPath);
+  }
+}
+
+/**
+ * Bulk save attendance entries.
+ */
+export async function bulkMarkAttendanceInDb(records: AttendanceRecord[]): Promise<void> {
+  const colPath = 'attendance_logs';
+  try {
+    for (const rec of records) {
+      await setDoc(doc(db, colPath, rec.id), {
+        ...rec,
+        updatedAt: new Date().toISOString(),
+      });
+    }
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, colPath);
+  }
+}
+
+/**
+ * Real-time listener for Leave Requests.
+ */
+export function subscribeToLeaves(onData: (leaves: LeaveRequest[]) => void): () => void {
+  const colPath = 'leave_requests';
+  const colRef = collection(db, colPath);
+
+  return onSnapshot(
+    colRef,
+    (snapshot) => {
+      const leaves: LeaveRequest[] = snapshot.docs.map((docSnap) => {
+        const d = docSnap.data();
+        return {
+          id: docSnap.id,
+          employeeId: d.employeeId || '',
+          employeeName: d.employeeName || '',
+          department: d.department || 'Admin',
+          leaveType: d.leaveType || 'Casual',
+          startDate: d.startDate || '',
+          endDate: d.endDate || '',
+          days: Number(d.days) || 1,
+          reason: d.reason || '',
+          status: d.status || 'Pending',
+          appliedOn: d.appliedOn || '',
+        };
+      });
+      // Sort newest first
+      leaves.sort((a, b) => b.appliedOn.localeCompare(a.appliedOn));
+      onData(leaves);
+    },
+    (err) => {
+      handleFirestoreError(err, OperationType.LIST, colPath);
+    }
+  );
+}
+
+/**
+ * Submit or update Leave Request.
+ */
+export async function saveLeaveRequestInDb(request: LeaveRequest): Promise<void> {
+  const colPath = 'leave_requests';
+  try {
+    await setDoc(doc(db, colPath, request.id), {
+      ...request,
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, colPath);
+  }
+}
+
+/**
+ * Update Leave Request status.
+ */
+export async function updateLeaveStatusInDb(requestId: string, status: LeaveStatus): Promise<void> {
+  const colPath = 'leave_requests';
+  try {
+    await updateDoc(doc(db, colPath, requestId), {
+      status,
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.UPDATE, colPath);
+  }
+}
+
+/**
+ * Real-time listener for Payroll Records.
+ */
+export function subscribeToPayroll(
+  monthStr: string,
+  onData: (records: PayrollRecord[]) => void
+): () => void {
+  const colPath = 'payroll_records';
+  const colRef = collection(db, colPath);
+
+  return onSnapshot(
+    colRef,
+    (snapshot) => {
+      const records: PayrollRecord[] = snapshot.docs
+        .map((docSnap) => {
+          const d = docSnap.data();
+          return {
+            id: docSnap.id,
+            month: d.month || '',
+            employeeId: d.employeeId || '',
+            employeeName: d.employeeName || '',
+            department: d.department || 'Admin',
+            designation: d.designation || '',
+            basicSalary: Number(d.basicSalary) || 0,
+            allowances: Number(d.allowances) || 0,
+            pfDeduction: Number(d.pfDeduction) || 0,
+            taxDeduction: Number(d.taxDeduction) || 0,
+            netSalary: Number(d.netSalary) || 0,
+            paymentStatus: d.paymentStatus || 'Pending',
+            paymentDate: d.paymentDate || '',
+            bankReference: d.bankReference || '',
+          };
+        })
+        .filter((r) => r.month === monthStr);
+
+      onData(records);
+    },
+    (err) => {
+      handleFirestoreError(err, OperationType.LIST, colPath);
+    }
+  );
+}
+
+/**
+ * Mark Payroll as Paid.
+ */
+export async function markPayrollPaidInDb(
+  recordId: string,
+  paymentDate: string,
+  bankRef: string
+): Promise<void> {
+  const colPath = 'payroll_records';
+  try {
+    await updateDoc(doc(db, colPath, recordId), {
+      paymentStatus: 'Paid',
+      paymentDate,
+      bankReference: bankRef,
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.UPDATE, colPath);
+  }
+}
+

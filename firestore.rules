@@ -55,6 +55,30 @@ service cloud.firestore {
              data.paymentMode is string;
     }
 
+    function isValidEmployee(data) {
+      return data.name is string && data.name.size() <= 160 &&
+             data.department is string &&
+             data.monthlySalary is number;
+    }
+
+    function isValidAttendance(data) {
+      return data.employeeName is string &&
+             data.date is string &&
+             data.status is string;
+    }
+
+    function isValidPayroll(data) {
+      return data.employeeName is string &&
+             data.month is string &&
+             data.netSalary is number;
+    }
+
+    function isValidLeave(data) {
+      return data.employeeName is string &&
+             data.leaveType is string &&
+             data.status is string;
+    }
+
     // Master Inventory Catalog & Stock
     match /inventory/{itemId} {
       allow read: if true;
@@ -84,6 +108,38 @@ service cloud.firestore {
       allow read: if true;
       allow create: if isValidId(receiptId) && isValidReceipt(incoming());
       allow update: if isValidId(receiptId) && isValidReceipt(incoming());
+      allow delete: if false;
+    }
+
+    // Employee Master Records
+    match /employees/{empId} {
+      allow read: if true;
+      allow create: if isValidId(empId) && isValidEmployee(incoming());
+      allow update: if isValidId(empId) && isValidEmployee(incoming());
+      allow delete: if false;
+    }
+
+    // Daily Attendance Logs
+    match /attendance_logs/{logId} {
+      allow read: if true;
+      allow create: if isValidId(logId) && isValidAttendance(incoming());
+      allow update: if isValidId(logId) && isValidAttendance(incoming());
+      allow delete: if false;
+    }
+
+    // Monthly Payroll Records
+    match /payroll_records/{recordId} {
+      allow read: if true;
+      allow create: if isValidId(recordId) && isValidPayroll(incoming());
+      allow update: if isValidId(recordId) && isValidPayroll(incoming());
+      allow delete: if false;
+    }
+
+    // Staff Leave Requests
+    match /leave_requests/{requestId} {
+      allow read: if true;
+      allow create: if isValidId(requestId) && isValidLeave(incoming());
+      allow update: if isValidId(requestId) && isValidLeave(incoming());
       allow delete: if false;
     }
   }
