@@ -177,3 +177,77 @@ export interface PayrollRecord {
 }
 
 export type HRSubTab = 'overview' | 'employee' | 'attendance' | 'payroll' | 'leave' | 'reports';
+
+export interface ExpenseRecord {
+  id: string;
+  expenseNo: string;
+  date: string;
+  category: 'Logistics & Diesel' | 'Yard Labour' | 'Vehicle Maintenance' | 'Utilities & Rent' | 'Loading & Unloading' | 'Office Tea & Snacks';
+  description: string;
+  amount: number;
+  paymentMode: 'Cash' | 'Bank Transfer (RTGS/NEFT)' | 'UPI' | 'Cheque';
+  paidTo: string;
+  approvedBy: string;
+  status: 'Approved' | 'Pending' | 'Rejected';
+}
+
+export interface PurchaseItem {
+  itemId: string;
+  itemName: string;
+  category: Category;
+  quantity: number;
+  unit: UnitType;
+  rate: number;
+  amount: number;
+}
+
+export interface PurchaseRecord {
+  id: string;
+  purchaseNo: string;
+  supplierName: string;
+  supplierGst: string;
+  date: string;
+  category: Category;
+  items: PurchaseItem[];
+  subtotal: number;
+  gstAmount: number;
+  totalAmount: number;
+  paymentStatus: 'Paid' | 'Pending' | 'Partial';
+  truckNumber: string;
+  challanNo: string;
+}
+
+export interface BankAccount {
+  id: string;
+  bankName: string;
+  accountNumber: string;
+  branch: string;
+  ifsc: string;
+  accountType: 'Current' | 'Cash Credit (CC)' | 'Cash Drawer';
+  currentBalance: number;
+  unclearedChequesCount: number;
+  status: 'Active' | 'Reconciled';
+}
+
+export interface ContraEntry {
+  id: string;
+  voucherNo: string;
+  date: string;
+  fromAccount: string;
+  toAccount: string;
+  amount: number;
+  referenceNo: string;
+  remarks: string;
+}
+
+export interface JournalEntry {
+  id: string;
+  jvNo: string;
+  date: string;
+  debitAccount: string;
+  debitAmount: number;
+  creditAccount: string;
+  creditAmount: number;
+  narration: string;
+  authorizedBy: string;
+}

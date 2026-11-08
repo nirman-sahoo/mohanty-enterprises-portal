@@ -11,6 +11,13 @@ import { InvoicesView } from './components/InvoicesView';
 import { InventoryView } from './components/InventoryView';
 import { LedgerView } from './components/LedgerView';
 import { HRPayrollView } from './components/hr/HRPayrollView';
+import { ReportsView } from './components/ReportsView';
+import { ExpensesView } from './components/ExpensesView';
+import { ProcurementView } from './components/ProcurementView';
+import { BankingView } from './components/BankingView';
+import { AccountMasterView } from './components/AccountMasterView';
+import { JournalView } from './components/JournalView';
+import { SettingsView } from './components/SettingsView';
 import { MoneyReceiptModal } from './components/MoneyReceiptModal';
 import { PartyStatementModal } from './components/PartyStatementModal';
 import { 
@@ -41,6 +48,9 @@ export default function App() {
 
   // Navigation tab state
   const [activeTab, setActiveTab] = useState<NavTab>('overview');
+
+  // Mobile sidebar drawer state
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState<boolean>(false);
 
   // Live Firebase state (clean production data, no mock records)
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
@@ -162,8 +172,13 @@ export default function App() {
       {/* Sidebar: Dark slate left navigation bar */}
       <Sidebar
         activeTab={activeTab}
-        onTabChange={(tab) => setActiveTab(tab)}
+        onTabChange={(tab) => {
+          setActiveTab(tab);
+          setIsMobileSidebarOpen(false);
+        }}
         onSignOut={() => setIsAuthenticated(false)}
+        isOpenMobile={isMobileSidebarOpen}
+        onCloseMobile={() => setIsMobileSidebarOpen(false)}
       />
 
       {/* Main Workspace Frame */}
@@ -174,6 +189,8 @@ export default function App() {
           onOpenRecordSale={() => setIsRecordSaleModalOpen(true)}
           operatorName={operatorName}
           onSignOut={() => setIsAuthenticated(false)}
+          onNavigateToTab={(tab) => setActiveTab(tab)}
+          onToggleMobileMenu={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
         />
 
         {/* Scrollable Content Viewport */}
@@ -188,6 +205,10 @@ export default function App() {
                 onViewInvoice={(sale) => setSelectedInvoiceForModal(sale)}
                 onNavigateToTab={(tab) => setActiveTab(tab)}
               />
+            )}
+
+            {activeTab === 'account-master' && (
+              <AccountMasterView />
             )}
 
             {activeTab === 'new-sale' && (
@@ -209,6 +230,17 @@ export default function App() {
                   onCancel={() => setActiveTab('overview')}
                 />
               </div>
+            )}
+
+            {activeTab === 'purchase' && (
+              <ProcurementView 
+                inventory={inventory}
+                onRestockItem={handleRestockItem}
+              />
+            )}
+
+            {activeTab === 'expenses' && (
+              <ExpensesView />
             )}
 
             {activeTab === 'invoices' && (
@@ -237,8 +269,29 @@ export default function App() {
               />
             )}
 
+            {activeTab === 'banking' && (
+              <BankingView />
+            )}
+
+            {activeTab === 'journal' && (
+              <JournalView />
+            )}
+
+            {activeTab === 'reports' && (
+              <ReportsView
+                sales={sales}
+                inventory={inventory}
+                ledgers={ledgers}
+                onOpenRecordSale={() => setIsRecordSaleModalOpen(true)}
+              />
+            )}
+
             {activeTab === 'hr-payroll' && (
               <HRPayrollView />
+            )}
+
+            {activeTab === 'settings' && (
+              <SettingsView />
             )}
           </div>
         </main>
