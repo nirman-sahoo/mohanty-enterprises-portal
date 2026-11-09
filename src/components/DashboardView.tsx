@@ -23,13 +23,16 @@ import {
   Boxes,
   ArrowRight
 } from 'lucide-react';
-import { InventoryItem, SaleRecord, CustomerLedger } from '../types';
+import { InventoryItem, SaleRecord, CustomerLedger, PurchaseRecord, ExpenseRecord, BankAccount } from '../types';
 import { formatINR } from '../data/inventoryData';
 
 interface DashboardViewProps {
   inventory: InventoryItem[];
   sales: SaleRecord[];
   ledgers?: CustomerLedger[];
+  purchases?: PurchaseRecord[];
+  expenses?: ExpenseRecord[];
+  bankAccounts?: BankAccount[];
   onOpenRecordSale: () => void;
   onViewInvoice: (sale: SaleRecord) => void;
   onNavigateToTab: (tab: any) => void;
@@ -39,6 +42,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   inventory,
   sales,
   ledgers = [],
+  purchases = [],
+  expenses = [],
+  bankAccounts = [],
   onOpenRecordSale,
   onViewInvoice,
   onNavigateToTab,
@@ -52,16 +58,30 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   // Filter sales according to dateFilter
   const todayStr = new Date().toISOString().split('T')[0];
 
-  // Cash & Bank Collections
-  const totalPaidRevenue = sales
-    .filter((s) => s.paymentStatus === 'Paid')
+  // Cash & Bank Collections from actual transactions or bank accounts
+  const totalCashBalance = bankAccounts.length > 0
+    ? bankAccounts
+        .filter(b => b.accountType === 'Cash Drawer' || b.bankName.toLowerCase().includes('cash'))
+        .reduce((sum, b) => sum + (b.currentBalance || 0), 0)
+    : sales
+        .filter((s) => s.paymentStatus === 'Paid' && (s.paymentMode === 'Cash' || (s.paymentMode && s.paymentMode.toLowerCase().includes('cash'))))
+        .reduce((sum, s) => sum + s.totalAmount, 0);
+
+  const totalBankBalance = bankAccounts.length > 0
+    ? bankAccounts
+        .filter(b => b.accountType !== 'Cash Drawer' && !b.bankName.toLowerCase().includes('cash'))
+        .reduce((sum, b) => sum + (b.currentBalance || 0), 0)
+    : sales
+        .filter((s) => s.paymentStatus === 'Paid' && (s.paymentMode !== 'Cash' && (!s.paymentMode || !s.paymentMode.toLowerCase().includes('cash'))))
+        .reduce((sum, s) => sum + s.totalAmount, 0);
+
+  const totalCashCollected = sales
+    .filter((s) => s.paymentStatus === 'Paid' && (s.paymentMode === 'Cash' || (s.paymentMode && s.paymentMode.toLowerCase().includes('cash'))))
     .reduce((sum, s) => sum + s.totalAmount, 0);
 
-  const totalCashCollected = Math.round(totalPaidRevenue * 0.35);
-  const totalBankCollection = Math.round(totalPaidRevenue * 0.65);
-
-  const totalCashBalance = Math.max(0, totalCashCollected - 15000); // Live cash-in-drawer
-  const totalBankBalance = Math.max(0, totalBankCollection + 250000); // Live operating bank balance
+  const totalBankCollection = sales
+    .filter((s) => s.paymentStatus === 'Paid' && (s.paymentMode !== 'Cash' && (!s.paymentMode || !s.paymentMode.toLowerCase().includes('cash'))))
+    .reduce((sum, s) => sum + s.totalAmount, 0);
 
   // Receivables from live Customer Ledgers
   const expectedReceivable = ledgers.reduce(
@@ -72,37 +92,41 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     (s) => s.paymentStatus === 'Credit' || s.paymentStatus === 'Partial'
   ).length;
 
-  const billsPayableCount = 2; // Verified supplier bills (UltraTech & SCAN Steels)
-  const expectedPayable = 930000;
+  // Live Bills Payable calculated from purchases in Firestore
+  const pendingPurchases = purchases.filter(
+    (p) => p.paymentStatus === 'Pending' || p.paymentStatus === 'Partial'
+  );
+  const billsPayableCount = pendingPurchases.length;
+  const expectedPayable = pendingPurchases.reduce((sum, p) => sum + (p.totalAmount || 0), 0);
 
   // Low Stock Items
   const lowStockItems = inventory.filter(
     (item) => item.isCriticalLow || item.stockLevel <= item.reorderLevel
   );
 
-  // Perishable batch items (Cement bags have 90-day BIS freshness cycle)
-  const cementExpiryAlerts = [
-    {
-      id: 'exp-cem-1',
-      batch: 'BATCH-UT-4482',
-      name: 'UltraTech PPC Cement (50kg)',
-      mfgDate: '2026-09-10',
-      expiryDate: '2026-12-10',
-      daysRemaining: 28,
-      stockQuantity: '180 Bags',
-      location: 'Yard Shed 2'
-    },
-    {
-      id: 'exp-cem-2',
-      batch: 'BATCH-AC-1029',
-      name: 'Ambuja Kawach Waterproof Cement',
-      mfgDate: '2026-09-25',
-      expiryDate: '2026-12-25',
-      daysRemaining: 43,
-      stockQuantity: '95 Bags',
-      location: 'Yard Shed 1'
-    }
-  ];
+  // Perishable batch items from real purchases
+  const cementExpiryAlerts = purchases
+    .filter(p => p.challanNo || p.truckNumber || p.category === 'CEMENT')
+    .map(p => {
+      const pDate = new Date(p.date || todayStr);
+      const expDate = new Date(pDate.getTime() + 90 * 24 * 60 * 60 * 1000);
+      const now = new Date();
+      const diffTime = expDate.getTime() - now.getTime();
+      const daysRemaining = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+      const firstItem = p.items && p.items.length > 0 ? p.items[0] : null;
+      const itemName = firstItem ? firstItem.itemName : `${p.category} Stock Batch`;
+      const qtyStr = firstItem ? `${firstItem.quantity} ${firstItem.unit}` : 'Consignment Lot';
+      return {
+        id: p.id,
+        batch: p.challanNo || `LOT-${p.purchaseNo}`,
+        name: itemName,
+        mfgDate: p.date,
+        expiryDate: expDate.toISOString().split('T')[0],
+        daysRemaining,
+        stockQuantity: qtyStr,
+        location: 'Yard Shed 1'
+      };
+    });
 
   // Top Sales Items aggregation
   const itemSalesMap = sales.reduce((acc, sale) => {
@@ -564,24 +588,32 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {cementExpiryAlerts
-                .filter(c => c.daysRemaining <= parseInt(expiryFilter))
-                .map((batch) => (
-                  <tr key={batch.id} className="hover:bg-slate-50/75">
-                    <td className="py-2.5 px-3 font-mono font-bold text-slate-700">{batch.batch}</td>
-                    <td className="py-2.5 px-3 font-bold text-slate-900">{batch.name}</td>
-                    <td className="py-2.5 px-3 text-slate-500 font-mono">{batch.mfgDate}</td>
-                    <td className="py-2.5 px-3 text-slate-500 font-mono">{batch.expiryDate}</td>
-                    <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">{batch.stockQuantity}</td>
-                    <td className="py-2.5 px-3 text-center">
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                        batch.daysRemaining <= 30 ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
-                      }`}>
-                        {batch.daysRemaining} days left (Sell First)
-                      </span>
-                    </td>
-                  </tr>
-                ))}
+              {cementExpiryAlerts.filter(c => c.daysRemaining <= parseInt(expiryFilter)).length > 0 ? (
+                cementExpiryAlerts
+                  .filter(c => c.daysRemaining <= parseInt(expiryFilter))
+                  .map((batch) => (
+                    <tr key={batch.id} className="hover:bg-slate-50/75">
+                      <td className="py-2.5 px-3 font-mono font-bold text-slate-700">{batch.batch}</td>
+                      <td className="py-2.5 px-3 font-bold text-slate-900">{batch.name}</td>
+                      <td className="py-2.5 px-3 text-slate-500 font-mono">{batch.mfgDate}</td>
+                      <td className="py-2.5 px-3 text-slate-500 font-mono">{batch.expiryDate}</td>
+                      <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">{batch.stockQuantity}</td>
+                      <td className="py-2.5 px-3 text-center">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          batch.daysRemaining <= 30 ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
+                        }`}>
+                          {batch.daysRemaining} days left (Sell First)
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+              ) : (
+                <tr>
+                  <td colSpan={6} className="py-8 text-center text-slate-400 text-xs">
+                    No active batch freshness alerts. Recorded procurement lots and delivery challans will appear here.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

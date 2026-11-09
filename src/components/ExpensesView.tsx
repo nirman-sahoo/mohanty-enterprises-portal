@@ -3,104 +3,26 @@ import {
   Receipt, 
   Plus, 
   Download, 
-  Calendar, 
-  DollarSign, 
-  TrendingDown, 
-  Truck, 
-  Users, 
-  Wrench, 
-  Zap, 
-  Coffee, 
   Search,
-  Filter,
   CheckCircle2,
   X,
-  CreditCard,
-  Building2
 } from 'lucide-react';
 import { ExpenseRecord } from '../types';
 import { formatINR } from '../data/inventoryData';
 
-const INITIAL_EXPENSES: ExpenseRecord[] = [
-  {
-    id: 'exp-101',
-    expenseNo: 'EXP-2026-0042',
-    date: '2026-11-06',
-    category: 'Logistics & Diesel',
-    description: 'Diesel fuel refill for 10-wheeler delivery truck OD-05-AB-4421',
-    amount: 14500,
-    paymentMode: 'Bank Transfer (RTGS/NEFT)',
-    paidTo: 'Indian Oil Highway Petro Pump',
-    approvedBy: 'Ayushman Mohanty',
-    status: 'Approved'
-  },
-  {
-    id: 'exp-102',
-    expenseNo: 'EXP-2026-0043',
-    date: '2026-11-06',
-    category: 'Yard Labour',
-    description: 'Daily loading & stacking wages for 6 yard workers (500 bags cement)',
-    amount: 4200,
-    paymentMode: 'Cash',
-    paidTo: 'Ramesh Naik (Labour Head)',
-    approvedBy: 'B. Patnaik',
-    status: 'Approved'
-  },
-  {
-    id: 'exp-103',
-    expenseNo: 'EXP-2026-0044',
-    date: '2026-11-05',
-    category: 'Loading & Unloading',
-    description: 'Crane unloading charges for TMT trailer consignment from Durgapur',
-    amount: 6800,
-    paymentMode: 'UPI',
-    paidTo: 'Maa Tarini Crane Services',
-    approvedBy: 'Ayushman Mohanty',
-    status: 'Approved'
-  },
-  {
-    id: 'exp-104',
-    expenseNo: 'EXP-2026-0045',
-    date: '2026-11-04',
-    category: 'Vehicle Maintenance',
-    description: 'Hydraulic overhaul and tyre vulcanizing for Eicher 19-ft Tipper',
-    amount: 8750,
-    paymentMode: 'Bank Transfer (RTGS/NEFT)',
-    paidTo: 'National Auto Garage',
-    approvedBy: 'Ayushman Mohanty',
-    status: 'Approved'
-  },
-  {
-    id: 'exp-105',
-    expenseNo: 'EXP-2026-0046',
-    date: '2026-11-03',
-    category: 'Utilities & Rent',
-    description: 'Electricity power billing for Cuttack wholesale warehouse and high-mast lights',
-    amount: 11200,
-    paymentMode: 'Bank Transfer (RTGS/NEFT)',
-    paidTo: 'TPCODL Commercial Power',
-    approvedBy: 'Ayushman Mohanty',
-    status: 'Approved'
-  },
-  {
-    id: 'exp-106',
-    expenseNo: 'EXP-2026-0047',
-    date: '2026-11-02',
-    category: 'Office Tea & Snacks',
-    description: 'Monthly tea, snacks, and mineral water supply for yard operators and drivers',
-    amount: 1850,
-    paymentMode: 'Cash',
-    paidTo: 'Sahoo Refreshments',
-    approvedBy: 'K. Sahu',
-    status: 'Approved'
-  }
-];
+interface ExpensesViewProps {
+  expenses: ExpenseRecord[];
+  onSaveExpense: (expense: ExpenseRecord) => Promise<void>;
+}
 
-export const ExpensesView: React.FC = () => {
-  const [expenses, setExpenses] = useState<ExpenseRecord[]>(INITIAL_EXPENSES);
+export const ExpensesView: React.FC<ExpensesViewProps> = ({
+  expenses,
+  onSaveExpense,
+}) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -127,13 +49,14 @@ export const ExpensesView: React.FC = () => {
   const totalCash = expenses.filter(e => e.paymentMode === 'Cash').reduce((sum, e) => sum + e.amount, 0);
   const totalBank = expenses.filter(e => e.paymentMode !== 'Cash').reduce((sum, e) => sum + e.amount, 0);
 
-  const handleAddExpense = (e: React.FormEvent) => {
+  const handleAddExpense = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.description || !formData.amount || !formData.paidTo) return;
 
+    setIsSubmitting(true);
     const newExp: ExpenseRecord = {
       id: `exp-${Date.now()}`,
-      expenseNo: `EXP-2026-${String(expenses.length + 43).padStart(4, '0')}`,
+      expenseNo: `EXP-2026-${String(expenses.length + 1).padStart(4, '0')}`,
       date: formData.date,
       category: formData.category,
       description: formData.description,
@@ -144,16 +67,20 @@ export const ExpensesView: React.FC = () => {
       status: 'Approved'
     };
 
-    setExpenses([newExp, ...expenses]);
-    setIsAddModalOpen(false);
-    setFormData({
-      category: 'Logistics & Diesel',
-      description: '',
-      amount: '',
-      paymentMode: 'Bank Transfer (RTGS/NEFT)',
-      paidTo: '',
-      date: new Date().toISOString().split('T')[0]
-    });
+    try {
+      await onSaveExpense(newExp);
+      setIsAddModalOpen(false);
+      setFormData({
+        category: 'Logistics & Diesel',
+        description: '',
+        amount: '',
+        paymentMode: 'Bank Transfer (RTGS/NEFT)',
+        paidTo: '',
+        date: new Date().toISOString().split('T')[0]
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleExportCSV = () => {
@@ -192,7 +119,7 @@ export const ExpensesView: React.FC = () => {
               Commercial Expenses Register
             </h1>
             <p className="text-xs text-slate-500 font-medium">
-              Track yard operations, truck fuel, loading labour, and administrative outlays
+              Record yard operations, truck fuel, loading labour, and operational vouchers live in database
             </p>
           </div>
         </div>
@@ -220,7 +147,7 @@ export const ExpensesView: React.FC = () => {
         <div className="bg-white p-5 rounded-xl border border-slate-200/90 shadow-2xs">
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Expenses Logged</p>
           <p className="text-2xl font-bold text-slate-900 mt-1">{formatINR(totalAmount)}</p>
-          <p className="text-[11px] text-slate-400 mt-1">{expenses.length} approved commercial vouchers</p>
+          <p className="text-[11px] text-slate-400 mt-1">{expenses.length} recorded commercial vouchers</p>
         </div>
 
         <div className="bg-white p-5 rounded-xl border border-slate-200/90 shadow-2xs">
@@ -285,8 +212,10 @@ export const ExpensesView: React.FC = () => {
             <tbody className="divide-y divide-slate-100">
               {filteredExpenses.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-slate-400">
-                    No expense records matching your filter.
+                  <td colSpan={8} className="py-12 text-center text-slate-400">
+                    <Receipt className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                    <p className="font-semibold text-slate-700">No expense vouchers recorded yet</p>
+                    <p className="text-xs text-slate-400 mt-0.5">Click &ldquo;+ Log Expense Voucher&rdquo; to record fuel, yard wages, or operational payouts.</p>
                   </td>
                 </tr>
               ) : (
@@ -429,9 +358,10 @@ export const ExpensesView: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-[#F6B118] hover:bg-[#E5A010] text-slate-950 font-bold rounded-lg shadow-sm transition-all cursor-pointer"
+                  disabled={isSubmitting}
+                  className="px-5 py-2 bg-[#F6B118] hover:bg-[#E5A010] text-slate-950 font-bold rounded-lg shadow-sm transition-all cursor-pointer disabled:opacity-50"
                 >
-                  Confirm & Post Voucher
+                  {isSubmitting ? 'Recording...' : 'Confirm & Post Voucher'}
                 </button>
               </div>
             </form>

@@ -25,7 +25,13 @@ import {
   SaleRecord, 
   CustomerLedger, 
   MoneyReceipt, 
-  StatementEntry 
+  StatementEntry,
+  PurchaseRecord,
+  ExpenseRecord,
+  BankAccount,
+  ContraEntry,
+  AccountHead,
+  JournalEntry
 } from './types';
 import { numberToIndianWords } from './utils/formatters';
 import { testConnection } from './firebase/config';
@@ -38,7 +44,19 @@ import {
   recordPaymentInDb,
   updateFollowUpInDb,
   addStatementEntryInDb,
-  updateOrderGstInDb
+  updateOrderGstInDb,
+  subscribeToExpenses,
+  saveExpenseInDb,
+  subscribeToPurchases,
+  savePurchaseInDb,
+  subscribeToBankAccounts,
+  saveBankAccountInDb,
+  subscribeToContraEntries,
+  saveContraEntryInDb,
+  subscribeToAccountHeads,
+  saveAccountHeadInDb,
+  subscribeToJournalEntries,
+  saveJournalEntryInDb
 } from './services/firebaseService';
 
 export default function App() {
@@ -56,6 +74,12 @@ export default function App() {
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [sales, setSales] = useState<SaleRecord[]>([]);
   const [ledgers, setLedgers] = useState<CustomerLedger[]>([]);
+  const [expenses, setExpenses] = useState<ExpenseRecord[]>([]);
+  const [purchases, setPurchases] = useState<PurchaseRecord[]>([]);
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
+  const [contraEntries, setContraEntries] = useState<ContraEntry[]>([]);
+  const [accountHeads, setAccountHeads] = useState<AccountHead[]>([]);
+  const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([]);
   const [isDbLoading, setIsDbLoading] = useState<boolean>(true);
 
   // Modals state
@@ -81,10 +105,40 @@ export default function App() {
       setLedgers(parties);
     });
 
+    const unsubExpenses = subscribeToExpenses((data) => {
+      setExpenses(data);
+    });
+
+    const unsubPurchases = subscribeToPurchases((data) => {
+      setPurchases(data);
+    });
+
+    const unsubBankAccounts = subscribeToBankAccounts((data) => {
+      setBankAccounts(data);
+    });
+
+    const unsubContra = subscribeToContraEntries((data) => {
+      setContraEntries(data);
+    });
+
+    const unsubAccountHeads = subscribeToAccountHeads((data) => {
+      setAccountHeads(data);
+    });
+
+    const unsubJournal = subscribeToJournalEntries((data) => {
+      setJournalEntries(data);
+    });
+
     return () => {
       unsubInventory();
       unsubOrders();
       unsubLedgers();
+      unsubExpenses();
+      unsubPurchases();
+      unsubBankAccounts();
+      unsubContra();
+      unsubAccountHeads();
+      unsubJournal();
     };
   }, []);
 
@@ -201,6 +255,9 @@ export default function App() {
                 inventory={inventory}
                 sales={sales}
                 ledgers={ledgers}
+                purchases={purchases}
+                expenses={expenses}
+                bankAccounts={bankAccounts}
                 onOpenRecordSale={() => setIsRecordSaleModalOpen(true)}
                 onViewInvoice={(sale) => setSelectedInvoiceForModal(sale)}
                 onNavigateToTab={(tab) => setActiveTab(tab)}
@@ -208,7 +265,12 @@ export default function App() {
             )}
 
             {activeTab === 'account-master' && (
-              <AccountMasterView />
+              <AccountMasterView 
+                accounts={accountHeads}
+                onSaveAccount={async (acc) => {
+                  await saveAccountHeadInDb(acc);
+                }}
+              />
             )}
 
             {activeTab === 'new-sale' && (
@@ -235,12 +297,20 @@ export default function App() {
             {activeTab === 'purchase' && (
               <ProcurementView 
                 inventory={inventory}
-                onRestockItem={handleRestockItem}
+                purchases={purchases}
+                onSavePurchase={async (po) => {
+                  await savePurchaseInDb(po, inventory);
+                }}
               />
             )}
 
             {activeTab === 'expenses' && (
-              <ExpensesView />
+              <ExpensesView 
+                expenses={expenses}
+                onSaveExpense={async (exp) => {
+                  await saveExpenseInDb(exp);
+                }}
+              />
             )}
 
             {activeTab === 'invoices' && (
@@ -270,11 +340,25 @@ export default function App() {
             )}
 
             {activeTab === 'banking' && (
-              <BankingView />
+              <BankingView 
+                accounts={bankAccounts}
+                contraEntries={contraEntries}
+                onSaveAccount={async (acc) => {
+                  await saveBankAccountInDb(acc);
+                }}
+                onSaveContra={async (entry) => {
+                  await saveContraEntryInDb(entry, bankAccounts);
+                }}
+              />
             )}
 
             {activeTab === 'journal' && (
-              <JournalView />
+              <JournalView 
+                entries={journalEntries}
+                onSaveEntry={async (entry) => {
+                  await saveJournalEntryInDb(entry);
+                }}
+              />
             )}
 
             {activeTab === 'reports' && (

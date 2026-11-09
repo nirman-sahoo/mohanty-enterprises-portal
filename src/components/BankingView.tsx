@@ -3,99 +3,37 @@ import {
   Building2, 
   CreditCard, 
   ArrowLeftRight, 
-  Wallet, 
   CheckCircle2, 
   Clock, 
   Plus, 
   Download, 
-  RefreshCw,
-  Search,
   X,
-  IndianRupee,
   ShieldCheck
 } from 'lucide-react';
 import { BankAccount, ContraEntry } from '../types';
 import { formatINR } from '../data/inventoryData';
 
-const INITIAL_ACCOUNTS: BankAccount[] = [
-  {
-    id: 'bank-1',
-    bankName: 'State Bank of India (SBI)',
-    accountNumber: '394821004921',
-    branch: 'Choudwar Industrial Branch, Cuttack',
-    ifsc: 'SBIN0001234',
-    accountType: 'Current',
-    currentBalance: 1850000,
-    unclearedChequesCount: 1,
-    status: 'Reconciled'
-  },
-  {
-    id: 'bank-2',
-    bankName: 'HDFC Bank Ltd',
-    accountNumber: '50200084719201',
-    branch: 'Bajrakabati Road Corporate, Cuttack',
-    ifsc: 'HDFC0000412',
-    accountType: 'Current',
-    currentBalance: 640000,
-    unclearedChequesCount: 0,
-    status: 'Reconciled'
-  },
-  {
-    id: 'bank-3',
-    bankName: 'Office Cash in Safe Drawer',
-    accountNumber: 'DRAWER-01',
-    branch: 'Headquarters Dispatch Office',
-    ifsc: 'N/A',
-    accountType: 'Cash Drawer',
-    currentBalance: 34500,
-    unclearedChequesCount: 0,
-    status: 'Active'
-  }
-];
+interface BankingViewProps {
+  accounts: BankAccount[];
+  contraEntries: ContraEntry[];
+  onSaveAccount: (account: BankAccount) => Promise<void>;
+  onSaveContra: (entry: ContraEntry) => Promise<void>;
+}
 
-const INITIAL_CONTRA: ContraEntry[] = [
-  {
-    id: 'ce-1',
-    voucherNo: 'CNT-2026-0018',
-    date: '2026-11-06',
-    fromAccount: 'Office Cash in Safe Drawer',
-    toAccount: 'State Bank of India (SBI)',
-    amount: 50000,
-    referenceNo: 'CHQ-881290',
-    remarks: 'Daily wholesale counter cash deposited into SBI Current Account'
-  },
-  {
-    id: 'ce-2',
-    voucherNo: 'CNT-2026-0017',
-    date: '2026-11-04',
-    fromAccount: 'State Bank of India (SBI)',
-    toAccount: 'Office Cash in Safe Drawer',
-    amount: 25000,
-    referenceNo: 'ATM-WD-551',
-    remarks: 'Cash self-withdrawal for yard labour weekly wages advance'
-  },
-  {
-    id: 'ce-3',
-    voucherNo: 'CNT-2026-0016',
-    date: '2026-11-02',
-    fromAccount: 'State Bank of India (SBI)',
-    toAccount: 'HDFC Bank Ltd',
-    amount: 200000,
-    referenceNo: 'RTGS-SBI-99120',
-    remarks: 'Inter-account liquidity fund transfer for vendor credit settlement'
-  }
-];
-
-export const BankingView: React.FC = () => {
-  const [accounts, setAccounts] = useState<BankAccount[]>(INITIAL_ACCOUNTS);
-  const [contraEntries, setContraEntries] = useState<ContraEntry[]>(INITIAL_CONTRA);
+export const BankingView: React.FC<BankingViewProps> = ({
+  accounts,
+  contraEntries,
+  onSaveAccount,
+  onSaveContra,
+}) => {
   const [activeTab, setActiveTab] = useState<'accounts' | 'reconciliation' | 'contra'>('accounts');
   const [isContraModalOpen, setIsContraModalOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Form State
   const [contraForm, setContraForm] = useState({
-    fromAccount: 'Office Cash in Safe Drawer',
-    toAccount: 'State Bank of India (SBI)',
+    fromAccount: accounts[0]?.bankName || 'Office Cash in Safe Drawer',
+    toAccount: accounts[1]?.bankName || 'State Bank of India (Current A/C)',
     amount: '',
     referenceNo: '',
     remarks: '',
@@ -104,25 +42,15 @@ export const BankingView: React.FC = () => {
 
   const totalLiquidity = accounts.reduce((sum, a) => sum + a.currentBalance, 0);
 
-  const handlePostContra = (e: React.FormEvent) => {
+  const handlePostContra = async (e: React.FormEvent) => {
     e.preventDefault();
     const amt = parseFloat(contraForm.amount);
     if (!amt || amt <= 0 || contraForm.fromAccount === contraForm.toAccount) return;
 
-    // Adjust account balances
-    setAccounts(prev => prev.map(acc => {
-      if (acc.bankName === contraForm.fromAccount) {
-        return { ...acc, currentBalance: acc.currentBalance - amt };
-      }
-      if (acc.bankName === contraForm.toAccount) {
-        return { ...acc, currentBalance: acc.currentBalance + amt };
-      }
-      return acc;
-    }));
-
+    setIsSubmitting(true);
     const newContra: ContraEntry = {
       id: `ce-${Date.now()}`,
-      voucherNo: `CNT-2026-${String(contraEntries.length + 19).padStart(4, '0')}`,
+      voucherNo: `CNT-2026-${String(contraEntries.length + 1).padStart(4, '0')}`,
       date: contraForm.date,
       fromAccount: contraForm.fromAccount,
       toAccount: contraForm.toAccount,
@@ -131,16 +59,20 @@ export const BankingView: React.FC = () => {
       remarks: contraForm.remarks || 'Inter-account fund transfer'
     };
 
-    setContraEntries([newContra, ...contraEntries]);
-    setIsContraModalOpen(false);
-    setContraForm({
-      fromAccount: 'Office Cash in Safe Drawer',
-      toAccount: 'State Bank of India (SBI)',
-      amount: '',
-      referenceNo: '',
-      remarks: '',
-      date: new Date().toISOString().split('T')[0]
-    });
+    try {
+      await onSaveContra(newContra);
+      setIsContraModalOpen(false);
+      setContraForm({
+        fromAccount: accounts[0]?.bankName || 'Office Cash in Safe Drawer',
+        toAccount: accounts[1]?.bankName || 'State Bank of India (Current A/C)',
+        amount: '',
+        referenceNo: '',
+        remarks: '',
+        date: new Date().toISOString().split('T')[0]
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -156,7 +88,7 @@ export const BankingView: React.FC = () => {
               Banking, Reconciliation & Contra Entries
             </h1>
             <p className="text-xs text-slate-500 font-medium">
-              Manage commercial bank accounts, cash safe drawers, and internal liquidity transfers
+              Manage commercial bank accounts, cash safe drawers, and internal liquidity transfers live in database
             </p>
           </div>
         </div>
@@ -177,13 +109,13 @@ export const BankingView: React.FC = () => {
         <div className="bg-white p-5 rounded-xl border border-slate-200/90 shadow-2xs">
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Commercial Liquidity</p>
           <p className="text-2xl font-bold text-slate-900 mt-1">{formatINR(totalLiquidity)}</p>
-          <p className="text-[11px] text-emerald-600 font-semibold mt-1">Across 2 bank accounts & 1 cash drawer</p>
+          <p className="text-[11px] text-emerald-600 font-semibold mt-1">Across verified bank accounts & cash drawer</p>
         </div>
 
         <div className="bg-white p-5 rounded-xl border border-slate-200/90 shadow-2xs">
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">SBI Current Account</p>
           <p className="text-2xl font-bold text-blue-600 mt-1">
-            {formatINR(accounts.find(a => a.bankName.includes('SBI'))?.currentBalance || 0)}
+            {formatINR(accounts.find(a => a.bankName.includes('SBI') || a.bankName.includes('State Bank'))?.currentBalance || 0)}
           </p>
           <p className="text-[11px] text-slate-400 mt-1">Primary GST settlement account</p>
         </div>
@@ -193,7 +125,7 @@ export const BankingView: React.FC = () => {
           <p className="text-2xl font-bold text-amber-600 mt-1">
             {formatINR(accounts.find(a => a.accountType === 'Cash Drawer')?.currentBalance || 0)}
           </p>
-          <p className="text-[11px] text-slate-400 mt-1">Counter cash verified today</p>
+          <p className="text-[11px] text-slate-400 mt-1">Counter cash verified in system</p>
         </div>
       </div>
 
@@ -275,17 +207,27 @@ export const BankingView: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {contraEntries.map((c) => (
-                    <tr key={c.id} className="hover:bg-slate-50/75">
-                      <td className="py-3 px-4 font-mono font-bold text-slate-800">{c.voucherNo}</td>
-                      <td className="py-3 px-4 text-slate-500 font-mono">{c.date}</td>
-                      <td className="py-3 px-4 font-medium text-rose-700">{c.fromAccount}</td>
-                      <td className="py-3 px-4 font-medium text-emerald-700">{c.toAccount}</td>
-                      <td className="py-3 px-4 text-right font-black text-slate-900">{formatINR(c.amount)}</td>
-                      <td className="py-3 px-4 font-mono text-slate-600">{c.referenceNo}</td>
-                      <td className="py-3 px-4 text-slate-600">{c.remarks}</td>
+                  {contraEntries.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-12 text-center text-slate-400">
+                        <ArrowLeftRight className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                        <p className="font-semibold text-slate-700">No Contra entries recorded yet</p>
+                        <p className="text-xs text-slate-400 mt-0.5">Click &ldquo;+ Post Contra Transfer&rdquo; to move funds between bank accounts and cash drawers.</p>
+                      </td>
                     </tr>
-                  ))}
+                  ) : (
+                    contraEntries.map((c) => (
+                      <tr key={c.id} className="hover:bg-slate-50/75">
+                        <td className="py-3 px-4 font-mono font-bold text-slate-800">{c.voucherNo}</td>
+                        <td className="py-3 px-4 text-slate-500 font-mono">{c.date}</td>
+                        <td className="py-3 px-4 font-medium text-rose-700">{c.fromAccount}</td>
+                        <td className="py-3 px-4 font-medium text-emerald-700">{c.toAccount}</td>
+                        <td className="py-3 px-4 text-right font-black text-slate-900">{formatINR(c.amount)}</td>
+                        <td className="py-3 px-4 font-mono text-slate-600">{c.referenceNo}</td>
+                        <td className="py-3 px-4 text-slate-600">{c.remarks}</td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -297,15 +239,9 @@ export const BankingView: React.FC = () => {
                 <div className="flex items-center gap-3">
                   <ShieldCheck className="w-5 h-5 text-blue-600 shrink-0" />
                   <span>
-                    Monthly bank statements matched with ERP general ledger entries. All inward RTGS/NEFT receipts verified with bank passbook records.
+                    Monthly bank statements matched with ERP general ledger entries. Inward RTGS/NEFT receipts verified with bank passbook records.
                   </span>
                 </div>
-                <button 
-                  onClick={() => alert('Bank ledger records matched with CBS feed. 0 variances found.')}
-                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold shadow-2xs transition-colors shrink-0 cursor-pointer"
-                >
-                  Verify CBS Feed
-                </button>
               </div>
 
               <div className="border border-slate-200 rounded-xl overflow-hidden">
@@ -448,9 +384,10 @@ export const BankingView: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-[#F6B118] hover:bg-[#E5A010] text-slate-950 font-bold rounded-lg shadow-sm transition-all cursor-pointer"
+                  disabled={isSubmitting}
+                  className="px-5 py-2 bg-[#F6B118] hover:bg-[#E5A010] text-slate-950 font-bold rounded-lg shadow-sm transition-all cursor-pointer disabled:opacity-50"
                 >
-                  Confirm & Transfer
+                  {isSubmitting ? 'Transferring...' : 'Confirm & Transfer'}
                 </button>
               </div>
             </form>

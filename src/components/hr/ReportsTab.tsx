@@ -31,14 +31,16 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({
   const [activeReport, setActiveReport] = useState<'attendance' | 'payroll' | 'compliance'>('attendance');
 
   // Attendance Aggregates
-  const totalEmployees = Math.max(125, employees.length);
-  const presentCount = attendanceRecords.filter((r) => r.status === 'Present').length || 112;
-  const absentCount = attendanceRecords.filter((r) => r.status === 'Absent').length || 8;
-  const leaveCount = attendanceRecords.filter((r) => r.status === 'On Leave').length || 5;
+  const totalEmployees = employees.length;
+  const presentCount = attendanceRecords.filter((r) => r.status === 'Present').length;
+  const absentCount = attendanceRecords.filter((r) => r.status === 'Absent').length;
+  const leaveCount = attendanceRecords.filter((r) => r.status === 'On Leave').length;
+  const attendanceRate = totalEmployees > 0 ? ((presentCount / totalEmployees) * 100).toFixed(1) : '0.0';
+  const absenceRate = totalEmployees > 0 ? ((absentCount / totalEmployees) * 100).toFixed(1) : '0.0';
 
   // Payroll Aggregates
-  const totalPayrollEstimate = employees.reduce((sum, emp) => sum + emp.monthlySalary, 0);
-  const displayPayrollAmount = 1850000; // Matches client PDF ₹18.5L anchor
+  const totalPayrollEstimate = employees.reduce((sum, emp) => sum + (emp.monthlySalary || 0), 0);
+  const displayPayrollAmount = totalPayrollEstimate;
   const totalPF = Math.round(displayPayrollAmount * 0.12 * 0.65);
   const totalESI = Math.round(displayPayrollAmount * 0.0325 * 0.65);
   const totalTDS = Math.round(displayPayrollAmount * 0.035);
@@ -162,12 +164,12 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({
             <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
               <span className="text-xs font-bold text-slate-500 uppercase">Average Daily Headcount</span>
               <p className="text-2xl font-bold text-emerald-600 mt-1">{presentCount} Present</p>
-              <p className="text-xs text-emerald-700 font-medium mt-0.5">89.6% Attendance Rate</p>
+              <p className="text-xs text-emerald-700 font-medium mt-0.5">{attendanceRate}% Attendance Rate</p>
             </div>
             <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
               <span className="text-xs font-bold text-slate-500 uppercase">Average Daily Absence</span>
               <p className="text-2xl font-bold text-amber-600 mt-1">{absentCount} Staff</p>
-              <p className="text-xs text-amber-700 font-medium mt-0.5">6.4% Absence Rate</p>
+              <p className="text-xs text-amber-700 font-medium mt-0.5">{absenceRate}% Absence Rate</p>
             </div>
           </div>
 
@@ -195,29 +197,37 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {employees.map((emp) => {
-                    const rec = attendanceRecords.find((r) => r.employeeId === emp.id);
-                    return (
-                      <tr key={emp.id} className="hover:bg-slate-50">
-                        <td className="py-3 px-4 font-mono font-medium text-slate-600">{emp.empCode}</td>
-                        <td className="py-3 px-4 font-bold text-slate-900">{emp.name}</td>
-                        <td className="py-3 px-4">
-                          <span className="px-2 py-0.5 rounded text-[11px] bg-slate-100 text-slate-700 font-medium">
-                            {emp.department}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 text-slate-600">{emp.designation}</td>
-                        <td className="py-3 px-4 text-center">
-                          <span className="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800">
-                            {rec?.status || 'Present'}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 text-slate-600 font-mono text-[11px]">
-                          {rec?.checkInTime || '09:15 AM'} - {rec?.checkOutTime || '06:30 PM'}
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  {employees.length > 0 ? (
+                    employees.map((emp) => {
+                      const rec = attendanceRecords.find((r) => r.employeeId === emp.id);
+                      return (
+                        <tr key={emp.id} className="hover:bg-slate-50">
+                          <td className="py-3 px-4 font-mono font-medium text-slate-600">{emp.empCode}</td>
+                          <td className="py-3 px-4 font-bold text-slate-900">{emp.name}</td>
+                          <td className="py-3 px-4">
+                            <span className="px-2 py-0.5 rounded text-[11px] bg-slate-100 text-slate-700 font-medium">
+                              {emp.department}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-slate-600">{emp.designation}</td>
+                          <td className="py-3 px-4 text-center">
+                            <span className="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800">
+                              {rec?.status || 'Present'}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-slate-600 font-mono text-[11px]">
+                            {rec?.checkInTime || '09:15 AM'} - {rec?.checkOutTime || '06:30 PM'}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan={6} className="py-8 text-center text-slate-400 text-xs">
+                        No active employees registered in master roster.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -231,8 +241,8 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
               <span className="text-xs font-bold text-slate-500 uppercase">Gross Payroll Outflow</span>
-              <p className="text-2xl font-bold text-slate-900 mt-1">₹18,50,000</p>
-              <p className="text-xs text-slate-400 mt-0.5">Budgeted for {selectedMonth}</p>
+              <p className="text-2xl font-bold text-slate-900 mt-1">{formatINR(displayPayrollAmount)}</p>
+              <p className="text-xs text-slate-400 mt-0.5">Disbursal for {selectedMonth}</p>
             </div>
             <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
               <span className="text-xs font-bold text-slate-500 uppercase">Total Statutory Deductions</span>
@@ -257,34 +267,45 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({
               </h3>
             </div>
             <div className="p-6">
-              <div className="space-y-4">
-                {[
-                  { dept: 'Accounts & Audit', share: '24%', amount: '₹4,44,000', head: '4 Officers' },
-                  { dept: 'Wholesale Sales Desk', share: '32%', amount: '₹5,92,000', head: '6 Executives' },
-                  { dept: 'Warehouse & TMT Yard', share: '22%', amount: '₹4,07,000', head: '8 Supervisors & Operators' },
-                  { dept: 'Logistics & Dispatch Fleet', share: '14%', amount: '₹2,59,000', head: '5 Fleet Officers' },
-                  { dept: 'General Administration', share: '8%', amount: '₹1,48,000', head: '2 Admin Staff' },
-                ].map((item, idx) => (
-                  <div key={idx} className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 bg-slate-50 rounded-lg border border-slate-200 gap-2">
-                    <div>
-                      <div className="font-bold text-slate-900 text-xs">{item.dept}</div>
-                      <div className="text-[11px] text-slate-500">{item.head}</div>
-                    </div>
-                    <div className="flex items-center gap-6">
-                      <div className="text-right">
-                        <div className="font-bold text-slate-900 text-xs">{item.amount}</div>
-                        <div className="text-[11px] text-slate-500 font-medium">{item.share} of total</div>
+              {employees.length > 0 ? (
+                <div className="space-y-4">
+                  {Object.entries(
+                    employees.reduce((acc, emp) => {
+                      const dept = emp.department || 'General';
+                      if (!acc[dept]) acc[dept] = { count: 0, salary: 0 };
+                      acc[dept].count += 1;
+                      acc[dept].salary += (emp.monthlySalary || 0);
+                      return acc;
+                    }, {} as Record<string, { count: number; salary: number }>)
+                  ).map(([dept, data], idx) => {
+                    const share = totalPayrollEstimate > 0 ? Math.round((data.salary / totalPayrollEstimate) * 100) : 0;
+                    return (
+                      <div key={idx} className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 bg-slate-50 rounded-lg border border-slate-200 gap-2">
+                        <div>
+                          <div className="font-bold text-slate-900 text-xs">{dept}</div>
+                          <div className="text-[11px] text-slate-500">{data.count} Staff Members</div>
+                        </div>
+                        <div className="flex items-center gap-6">
+                          <div className="text-right">
+                            <div className="font-bold text-slate-900 text-xs">{formatINR(data.salary)}</div>
+                            <div className="text-[11px] text-slate-500 font-medium">{share}% of total</div>
+                          </div>
+                          <div className="w-24 bg-slate-200 rounded-full h-2">
+                            <div
+                              className="bg-amber-500 h-2 rounded-full"
+                              style={{ width: `${Math.max(4, share)}%` }}
+                            />
+                          </div>
+                        </div>
                       </div>
-                      <div className="w-24 bg-slate-200 rounded-full h-2">
-                        <div
-                          className="bg-amber-500 h-2 rounded-full"
-                          style={{ width: item.share }}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-center py-6 text-slate-400 text-xs">
+                  No employee salary records available for departmental breakdown.
+                </div>
+              )}
             </div>
           </div>
         </div>

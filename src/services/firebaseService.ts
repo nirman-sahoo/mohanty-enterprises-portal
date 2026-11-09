@@ -28,6 +28,12 @@ import {
   Department,
   EmployeeStatus,
   AttendanceStatus,
+  ExpenseRecord,
+  PurchaseRecord,
+  BankAccount,
+  ContraEntry,
+  JournalEntry,
+  AccountHead,
 } from '../types';
 import { CATEGORIES, CATEGORY_ITEMS } from '../data/inventoryData';
 
@@ -430,210 +436,15 @@ export async function updateOrderGstInDb(orderId: string, isGst: boolean, subtot
 // HR & PAYROLL MANAGEMENT SERVICES
 // ==========================================
 
-export const INITIAL_EMPLOYEES: Employee[] = [
-  {
-    id: 'emp-1',
-    empCode: 'ME-ACC-01',
-    name: 'Rajesh Kumar',
-    department: 'Accounts',
-    designation: 'Senior Accounts Officer',
-    phone: '+91 94371 10293',
-    email: 'rajesh.kumar@mohantyenterprises.in',
-    joiningDate: '2021-04-15',
-    monthlySalary: 38000,
-    bankAccount: '918237461928',
-    bankIfsc: 'SBIN0001244',
-    panNo: 'BKRPK9182A',
-    status: 'Active',
-  },
-  {
-    id: 'emp-2',
-    empCode: 'ME-SAL-01',
-    name: 'Amit Das',
-    department: 'Sales',
-    designation: 'Wholesale Sales Manager',
-    phone: '+91 98610 84729',
-    email: 'amit.das@mohantyenterprises.in',
-    joiningDate: '2019-11-01',
-    monthlySalary: 52000,
-    bankAccount: '109283746192',
-    bankIfsc: 'HDFC0000452',
-    panNo: 'ADMPD8291B',
-    status: 'Active',
-  },
-  {
-    id: 'emp-3',
-    empCode: 'ME-HR-01',
-    name: 'Suresh Patel',
-    department: 'HR',
-    designation: 'HR & Operations Lead',
-    phone: '+91 94372 99182',
-    email: 'suresh.patel@mohantyenterprises.in',
-    joiningDate: '2022-01-10',
-    monthlySalary: 35000,
-    bankAccount: '887291029384',
-    bankIfsc: 'ICIC0001928',
-    panNo: 'SPYPP1928C',
-    status: 'Active',
-  },
-  {
-    id: 'emp-4',
-    empCode: 'ME-ADM-01',
-    name: 'Rakesh Mohanty',
-    department: 'Admin',
-    designation: 'General Administration Head',
-    phone: '+91 98612 00192',
-    email: 'rakesh.mohanty@mohantyenterprises.in',
-    joiningDate: '2018-03-20',
-    monthlySalary: 65000,
-    bankAccount: '201928374619',
-    bankIfsc: 'UTIB0000219',
-    panNo: 'RMKPM9918D',
-    status: 'On Leave',
-  },
-  {
-    id: 'emp-5',
-    empCode: 'ME-YRD-01',
-    name: 'Manoj Swain',
-    department: 'Warehouse / Yard',
-    designation: 'Cement Godown Supervisor',
-    phone: '+91 97781 29481',
-    email: 'manoj.swain@mohantyenterprises.in',
-    joiningDate: '2020-08-15',
-    monthlySalary: 32000,
-    bankAccount: '445392817293',
-    bankIfsc: 'PUNB0192800',
-    panNo: 'MSWPK8821E',
-    status: 'Active',
-  },
-  {
-    id: 'emp-6',
-    empCode: 'ME-YRD-02',
-    name: 'Bipin Rout',
-    department: 'Warehouse / Yard',
-    designation: 'SCAN TMT Bar Yard Foreman',
-    phone: '+91 94373 88192',
-    email: 'bipin.rout@mohantyenterprises.in',
-    joiningDate: '2021-02-18',
-    monthlySalary: 34000,
-    bankAccount: '556192837461',
-    bankIfsc: 'SBIN0008392',
-    panNo: 'BROUT7729F',
-    status: 'Active',
-  },
-  {
-    id: 'emp-7',
-    empCode: 'ME-LOG-01',
-    name: 'Dinabandhu Jena',
-    department: 'Logistics',
-    designation: 'Dispatch & Fleet Coordinator',
-    phone: '+91 98614 77281',
-    email: 'dinabandhu.jena@mohantyenterprises.in',
-    joiningDate: '2020-05-12',
-    monthlySalary: 42000,
-    bankAccount: '998273619283',
-    bankIfsc: 'CNRB0001928',
-    panNo: 'DJENP6619G',
-    status: 'Active',
-  },
-  {
-    id: 'emp-8',
-    empCode: 'ME-LOG-02',
-    name: 'Santosh Nayak',
-    department: 'Logistics',
-    designation: 'Weighbridge & Truck In-Charge',
-    phone: '+91 97783 66192',
-    email: 'santosh.nayak@mohantyenterprises.in',
-    joiningDate: '2022-06-01',
-    monthlySalary: 30000,
-    bankAccount: '661928374619',
-    bankIfsc: 'UBIN0549281',
-    panNo: 'SNAYK5518H',
-    status: 'Active',
-  },
-  {
-    id: 'emp-9',
-    empCode: 'ME-ACC-02',
-    name: 'Subrat Sahoo',
-    department: 'Accounts',
-    designation: 'GST Billing & E-Waybill Specialist',
-    phone: '+91 94375 11928',
-    email: 'subrat.sahoo@mohantyenterprises.in',
-    joiningDate: '2022-09-15',
-    monthlySalary: 36000,
-    bankAccount: '334192837461',
-    bankIfsc: 'IDIB000K192',
-    panNo: 'SSAHO4419I',
-    status: 'Active',
-  },
-  {
-    id: 'emp-10',
-    empCode: 'ME-ACC-03',
-    name: 'Pradeep Behera',
-    department: 'Accounts',
-    designation: 'Khatabook & Collections Officer',
-    phone: '+91 98616 22918',
-    email: 'pradeep.behera@mohantyenterprises.in',
-    joiningDate: '2021-11-20',
-    monthlySalary: 33000,
-    bankAccount: '771928374619',
-    bankIfsc: 'BARB0BHUBAN',
-    panNo: 'PBEHP3318J',
-    status: 'Active',
-  },
-  {
-    id: 'emp-11',
-    empCode: 'ME-YRD-03',
-    name: 'Kailash Barik',
-    department: 'Warehouse / Yard',
-    designation: 'Fertilizer & Asbestos Depot In-Charge',
-    phone: '+91 97785 44192',
-    email: 'kailash.barik@mohantyenterprises.in',
-    joiningDate: '2023-01-15',
-    monthlySalary: 29000,
-    bankAccount: '112938475619',
-    bankIfsc: 'SBIN0011928',
-    panNo: 'KBARP2219K',
-    status: 'Active',
-  },
-  {
-    id: 'emp-12',
-    empCode: 'ME-SAL-02',
-    name: 'Debasish Mishra',
-    department: 'Sales',
-    designation: 'Contractor Relations Executive',
-    phone: '+91 94378 55192',
-    email: 'debasish.mishra@mohantyenterprises.in',
-    joiningDate: '2023-04-10',
-    monthlySalary: 28000,
-    bankAccount: '991827364519',
-    bankIfsc: 'HDFC0001928',
-    panNo: 'DMISP1119L',
-    status: 'Active',
-  },
-];
+export const INITIAL_EMPLOYEES: Employee[] = [];
 
 /**
  * Real-time listener for Employee Master.
- * Auto-seeds core wholesale staff if collection is empty.
+ * Real production data (starts empty, populated by admin via Employee Master).
  */
 export function subscribeToEmployees(onData: (employees: Employee[]) => void): () => void {
   const colPath = 'employees';
   const colRef = collection(db, colPath);
-
-  getDocs(colRef).then((snapshot) => {
-    if (snapshot.empty) {
-      console.log('Seeding initial wholesale team in Firestore...');
-      INITIAL_EMPLOYEES.forEach(async (emp) => {
-        await setDoc(doc(db, colPath, emp.id), {
-          ...emp,
-          updatedAt: new Date().toISOString(),
-        }).catch((err) => handleFirestoreError(err, OperationType.WRITE, colPath));
-      });
-    }
-  }).catch((err) => {
-    handleFirestoreError(err, OperationType.GET, colPath);
-  });
 
   return onSnapshot(
     colRef,
@@ -878,6 +689,401 @@ export async function markPayrollPaidInDb(
     });
   } catch (err) {
     handleFirestoreError(err, OperationType.UPDATE, colPath);
+  }
+}
+
+// ==========================================
+// COMMERCIAL EXPENSES SERVICES
+// ==========================================
+
+export function subscribeToExpenses(onData: (expenses: ExpenseRecord[]) => void): () => void {
+  const colPath = 'expenses';
+  const colRef = collection(db, colPath);
+
+  return onSnapshot(
+    colRef,
+    (snapshot) => {
+      const expenses: ExpenseRecord[] = snapshot.docs.map((docSnap) => {
+        const d = docSnap.data();
+        return {
+          id: docSnap.id,
+          expenseNo: d.expenseNo || '',
+          date: d.date || '',
+          category: d.category || 'Logistics & Diesel',
+          description: d.description || '',
+          amount: Number(d.amount) || 0,
+          paymentMode: d.paymentMode || 'Cash',
+          paidTo: d.paidTo || '',
+          approvedBy: d.approvedBy || 'Ayushman Mohanty',
+          status: d.status || 'Approved',
+        };
+      });
+      // Sort newest date first
+      expenses.sort((a, b) => b.date.localeCompare(a.date));
+      onData(expenses);
+    },
+    (err) => {
+      handleFirestoreError(err, OperationType.LIST, colPath);
+    }
+  );
+}
+
+export async function saveExpenseInDb(expense: ExpenseRecord): Promise<void> {
+  const colPath = 'expenses';
+  try {
+    await setDoc(doc(db, colPath, expense.id), {
+      ...expense,
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, colPath);
+  }
+}
+
+// ==========================================
+// MATERIAL PROCUREMENT / PURCHASE SERVICES
+// ==========================================
+
+export function subscribeToPurchases(onData: (purchases: PurchaseRecord[]) => void): () => void {
+  const colPath = 'purchases';
+  const colRef = collection(db, colPath);
+
+  return onSnapshot(
+    colRef,
+    (snapshot) => {
+      const purchases: PurchaseRecord[] = snapshot.docs.map((docSnap) => {
+        const d = docSnap.data();
+        return {
+          id: docSnap.id,
+          purchaseNo: d.purchaseNo || '',
+          supplierName: d.supplierName || '',
+          supplierGst: d.supplierGst || '',
+          date: d.date || '',
+          category: d.category || 'CEMENT',
+          items: d.items || [],
+          subtotal: Number(d.subtotal) || 0,
+          gstAmount: Number(d.gstAmount) || 0,
+          totalAmount: Number(d.totalAmount) || 0,
+          paymentStatus: d.paymentStatus || 'Paid',
+          truckNumber: d.truckNumber || '',
+          challanNo: d.challanNo || '',
+        };
+      });
+      purchases.sort((a, b) => b.date.localeCompare(a.date));
+      onData(purchases);
+    },
+    (err) => {
+      handleFirestoreError(err, OperationType.LIST, colPath);
+    }
+  );
+}
+
+export async function savePurchaseInDb(
+  purchase: PurchaseRecord,
+  currentInventory: InventoryItem[]
+): Promise<void> {
+  const colPath = 'purchases';
+  try {
+    // 1. Write purchase PO document
+    await setDoc(doc(db, colPath, purchase.id), {
+      ...purchase,
+      updatedAt: new Date().toISOString(),
+    });
+
+    // 2. Auto-restock matching warehouse items
+    const inventoryPath = 'inventory';
+    for (const item of purchase.items) {
+      const matchInv = currentInventory.find(
+        (inv) => inv.id === item.itemId || inv.name.toLowerCase() === item.itemName.toLowerCase()
+      );
+      if (matchInv) {
+        const newStock = Number((matchInv.stockLevel + item.quantity).toFixed(2));
+        await updateDoc(doc(db, inventoryPath, matchInv.id), {
+          stockLevel: newStock,
+          isCriticalLow: newStock <= matchInv.reorderLevel,
+          updatedAt: new Date().toISOString(),
+        }).catch((err) => handleFirestoreError(err, OperationType.UPDATE, inventoryPath));
+      }
+    }
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, colPath);
+  }
+}
+
+// ==========================================
+// BANKING & CASH ACCOUNTS SERVICES
+// ==========================================
+
+export function subscribeToBankAccounts(onData: (accounts: BankAccount[]) => void): () => void {
+  const colPath = 'bank_accounts';
+  const colRef = collection(db, colPath);
+
+  // Initialize standard accounts with 0 balance if empty
+  getDocs(colRef).then((snapshot) => {
+    if (snapshot.empty) {
+      const defaultAccounts: BankAccount[] = [
+        {
+          id: 'bank-sbi',
+          bankName: 'State Bank of India (Current A/C)',
+          accountNumber: '394821004921',
+          branch: 'Choudwar Industrial Branch, Cuttack',
+          ifsc: 'SBIN0001234',
+          accountType: 'Current',
+          currentBalance: 0,
+          unclearedChequesCount: 0,
+          status: 'Reconciled',
+        },
+        {
+          id: 'bank-hdfc',
+          bankName: 'HDFC Corporate Current A/C',
+          accountNumber: '50200084719201',
+          branch: 'Bajrakabati Road Corporate, Cuttack',
+          ifsc: 'HDFC0000412',
+          accountType: 'Current',
+          currentBalance: 0,
+          unclearedChequesCount: 0,
+          status: 'Reconciled',
+        },
+        {
+          id: 'bank-drawer',
+          bankName: 'Office Cash in Safe Drawer',
+          accountNumber: 'DRAWER-01',
+          branch: 'Headquarters Dispatch Counter',
+          ifsc: 'N/A',
+          accountType: 'Cash Drawer',
+          currentBalance: 0,
+          unclearedChequesCount: 0,
+          status: 'Active',
+        },
+      ];
+      defaultAccounts.forEach(async (acc) => {
+        await setDoc(doc(db, colPath, acc.id), {
+          ...acc,
+          updatedAt: new Date().toISOString(),
+        }).catch((err) => handleFirestoreError(err, OperationType.WRITE, colPath));
+      });
+    }
+  }).catch((err) => handleFirestoreError(err, OperationType.GET, colPath));
+
+  return onSnapshot(
+    colRef,
+    (snapshot) => {
+      const accounts: BankAccount[] = snapshot.docs.map((docSnap) => {
+        const d = docSnap.data();
+        return {
+          id: docSnap.id,
+          bankName: d.bankName || '',
+          accountNumber: d.accountNumber || '',
+          branch: d.branch || '',
+          ifsc: d.ifsc || '',
+          accountType: d.accountType || 'Current',
+          currentBalance: Number(d.currentBalance) || 0,
+          unclearedChequesCount: Number(d.unclearedChequesCount) || 0,
+          status: d.status || 'Active',
+        };
+      });
+      onData(accounts);
+    },
+    (err) => {
+      handleFirestoreError(err, OperationType.LIST, colPath);
+    }
+  );
+}
+
+export async function saveBankAccountInDb(account: BankAccount): Promise<void> {
+  const colPath = 'bank_accounts';
+  try {
+    await setDoc(doc(db, colPath, account.id), {
+      ...account,
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, colPath);
+  }
+}
+
+// ==========================================
+// CONTRA ENTRIES SERVICES
+// ==========================================
+
+export function subscribeToContraEntries(onData: (entries: ContraEntry[]) => void): () => void {
+  const colPath = 'contra_entries';
+  const colRef = collection(db, colPath);
+
+  return onSnapshot(
+    colRef,
+    (snapshot) => {
+      const entries: ContraEntry[] = snapshot.docs.map((docSnap) => {
+        const d = docSnap.data();
+        return {
+          id: docSnap.id,
+          voucherNo: d.voucherNo || '',
+          date: d.date || '',
+          fromAccount: d.fromAccount || '',
+          toAccount: d.toAccount || '',
+          amount: Number(d.amount) || 0,
+          referenceNo: d.referenceNo || '',
+          remarks: d.remarks || '',
+        };
+      });
+      entries.sort((a, b) => b.date.localeCompare(a.date));
+      onData(entries);
+    },
+    (err) => {
+      handleFirestoreError(err, OperationType.LIST, colPath);
+    }
+  );
+}
+
+export async function saveContraEntryInDb(
+  entry: ContraEntry,
+  currentAccounts: BankAccount[]
+): Promise<void> {
+  const contraPath = 'contra_entries';
+  const accountsPath = 'bank_accounts';
+
+  try {
+    // 1. Save Contra document
+    await setDoc(doc(db, contraPath, entry.id), {
+      ...entry,
+      updatedAt: new Date().toISOString(),
+    });
+
+    // 2. Adjust source and destination bank balances
+    const fromAcc = currentAccounts.find((a) => a.bankName === entry.fromAccount);
+    const toAcc = currentAccounts.find((a) => a.bankName === entry.toAccount);
+
+    if (fromAcc) {
+      const newBal = fromAcc.currentBalance - entry.amount;
+      await updateDoc(doc(db, accountsPath, fromAcc.id), {
+        currentBalance: newBal,
+        updatedAt: new Date().toISOString(),
+      }).catch((err) => handleFirestoreError(err, OperationType.UPDATE, accountsPath));
+    }
+
+    if (toAcc) {
+      const newBal = toAcc.currentBalance + entry.amount;
+      await updateDoc(doc(db, accountsPath, toAcc.id), {
+        currentBalance: newBal,
+        updatedAt: new Date().toISOString(),
+      }).catch((err) => handleFirestoreError(err, OperationType.UPDATE, accountsPath));
+    }
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, contraPath);
+  }
+}
+
+// ==========================================
+// ACCOUNT MASTER / CHART OF ACCOUNTS SERVICES
+// ==========================================
+
+export function subscribeToAccountHeads(onData: (heads: AccountHead[]) => void): () => void {
+  const colPath = 'account_heads';
+  const colRef = collection(db, colPath);
+
+  // Initialize default chart of accounts with 0 balance if empty
+  getDocs(colRef).then((snapshot) => {
+    if (snapshot.empty) {
+      const defaultHeads: AccountHead[] = [
+        { id: 'acc-1', code: '1001', name: 'State Bank of India (Current A/C)', group: 'Current Assets', balance: 0, balanceType: 'Dr' },
+        { id: 'acc-2', code: '1002', name: 'HDFC Corporate Current A/C', group: 'Current Assets', balance: 0, balanceType: 'Dr' },
+        { id: 'acc-3', code: '1003', name: 'Office Safe Cash Drawer', group: 'Current Assets', balance: 0, balanceType: 'Dr' },
+        { id: 'acc-4', code: '1004', name: 'Sundry Debtors (Wholesale Contractors)', group: 'Current Assets', balance: 0, balanceType: 'Dr' },
+        { id: 'acc-5', code: '1005', name: 'Warehouse Material Stock Inventory', group: 'Current Assets', balance: 0, balanceType: 'Dr' },
+        { id: 'acc-6', code: '2001', name: 'Sundry Creditors (Manufacturers & Mills)', group: 'Current Liabilities', balance: 0, balanceType: 'Cr' },
+        { id: 'acc-7', code: '2002', name: 'GST Output Liability (18% & 28%)', group: 'Current Liabilities', balance: 0, balanceType: 'Cr' },
+        { id: 'acc-8', code: '3001', name: 'Sales Account - Cement Wholesale', group: 'Direct Incomes', balance: 0, balanceType: 'Cr' },
+        { id: 'acc-9', code: '3002', name: 'Sales Account - SCAN TMT Bars', group: 'Direct Incomes', balance: 0, balanceType: 'Cr' },
+        { id: 'acc-10', code: '4001', name: 'Yard Labour & Hamali Charges', group: 'Direct Expenses', balance: 0, balanceType: 'Dr' },
+        { id: 'acc-11', code: '4002', name: 'Truck Diesel & Delivery Freight', group: 'Direct Expenses', balance: 0, balanceType: 'Dr' },
+      ];
+      defaultHeads.forEach(async (head) => {
+        await setDoc(doc(db, colPath, head.id), {
+          ...head,
+          updatedAt: new Date().toISOString(),
+        }).catch((err) => handleFirestoreError(err, OperationType.WRITE, colPath));
+      });
+    }
+  }).catch((err) => handleFirestoreError(err, OperationType.GET, colPath));
+
+  return onSnapshot(
+    colRef,
+    (snapshot) => {
+      const heads: AccountHead[] = snapshot.docs.map((docSnap) => {
+        const d = docSnap.data();
+        return {
+          id: docSnap.id,
+          code: d.code || '',
+          name: d.name || '',
+          group: d.group || 'Current Assets',
+          balance: Number(d.balance) || 0,
+          balanceType: d.balanceType || 'Dr',
+        };
+      });
+      heads.sort((a, b) => a.code.localeCompare(b.code));
+      onData(heads);
+    },
+    (err) => {
+      handleFirestoreError(err, OperationType.LIST, colPath);
+    }
+  );
+}
+
+export async function saveAccountHeadInDb(head: AccountHead): Promise<void> {
+  const colPath = 'account_heads';
+  try {
+    await setDoc(doc(db, colPath, head.id), {
+      ...head,
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, colPath);
+  }
+}
+
+// ==========================================
+// JOURNAL VOUCHERS (JV) SERVICES
+// ==========================================
+
+export function subscribeToJournalEntries(onData: (entries: JournalEntry[]) => void): () => void {
+  const colPath = 'journal_vouchers';
+  const colRef = collection(db, colPath);
+
+  return onSnapshot(
+    colRef,
+    (snapshot) => {
+      const entries: JournalEntry[] = snapshot.docs.map((docSnap) => {
+        const d = docSnap.data();
+        return {
+          id: docSnap.id,
+          jvNo: d.jvNo || '',
+          date: d.date || '',
+          debitAccount: d.debitAccount || '',
+          debitAmount: Number(d.debitAmount) || 0,
+          creditAccount: d.creditAccount || '',
+          creditAmount: Number(d.creditAmount) || 0,
+          narration: d.narration || '',
+          authorizedBy: d.authorizedBy || 'Ayushman Mohanty',
+        };
+      });
+      entries.sort((a, b) => b.date.localeCompare(a.date));
+      onData(entries);
+    },
+    (err) => {
+      handleFirestoreError(err, OperationType.LIST, colPath);
+    }
+  );
+}
+
+export async function saveJournalEntryInDb(entry: JournalEntry): Promise<void> {
+  const colPath = 'journal_vouchers';
+  try {
+    await setDoc(doc(db, colPath, entry.id), {
+      ...entry,
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, colPath);
   }
 }
 

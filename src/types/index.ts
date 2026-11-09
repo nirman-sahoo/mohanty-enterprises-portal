@@ -51,6 +51,7 @@ export interface SaleRecord {
   totalAmount: number; // Final payable
   status: OrderStatus;
   paymentStatus: PaymentStatus;
+  paymentMode?: string;
   truckNumber?: string;
   notes?: string;
 }
@@ -92,6 +93,7 @@ export interface CustomerLedger {
   phone: string;
   address: string;
   shipToAddress?: string;
+  openingBalance?: number;
   totalBilled: number;
   totalPaid: number;
   outstandingReceivable: number;
@@ -250,4 +252,13 @@ export interface JournalEntry {
   creditAmount: number;
   narration: string;
   authorizedBy: string;
+}
+
+export interface AccountHead {
+  id: string;
+  code: string;
+  name: string;
+  group: 'Current Assets' | 'Fixed Assets' | 'Current Liabilities' | 'Direct Incomes' | 'Direct Expenses' | 'Indirect Expenses';
+  balance: number;
+  balanceType: 'Dr' | 'Cr';
 }

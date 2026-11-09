@@ -79,6 +79,43 @@ service cloud.firestore {
              data.status is string;
     }
 
+    function isValidExpense(data) {
+      return data.expenseNo is string && data.expenseNo.size() <= 64 &&
+             data.amount is number &&
+             data.category is string;
+    }
+
+    function isValidPurchase(data) {
+      return data.purchaseNo is string && data.purchaseNo.size() <= 64 &&
+             data.totalAmount is number &&
+             data.supplierName is string;
+    }
+
+    function isValidBankAccount(data) {
+      return data.accountNo is string && data.accountNo.size() <= 64 &&
+             data.bankName is string &&
+             data.currentBalance is number;
+    }
+
+    function isValidContra(data) {
+      return data.contraNo is string && data.contraNo.size() <= 64 &&
+             data.amount is number &&
+             data.fromAccount is string &&
+             data.toAccount is string;
+    }
+
+    function isValidAccountHead(data) {
+      return data.code is string && data.code.size() <= 64 &&
+             data.name is string &&
+             data.group is string;
+    }
+
+    function isValidJournalEntry(data) {
+      return data.jvNo is string && data.jvNo.size() <= 64 &&
+             data.debitAmount is number &&
+             data.creditAmount is number;
+    }
+
     // Master Inventory Catalog & Stock
     match /inventory/{itemId} {
       allow read: if true;
@@ -140,6 +177,54 @@ service cloud.firestore {
       allow read: if true;
       allow create: if isValidId(requestId) && isValidLeave(incoming());
       allow update: if isValidId(requestId) && isValidLeave(incoming());
+      allow delete: if false;
+    }
+
+    // Operational Expenses
+    match /expenses/{expenseId} {
+      allow read: if true;
+      allow create: if isValidId(expenseId) && isValidExpense(incoming());
+      allow update: if isValidId(expenseId) && isValidExpense(incoming());
+      allow delete: if false;
+    }
+
+    // Supplier Purchases & Procurement
+    match /purchases/{purchaseId} {
+      allow read: if true;
+      allow create: if isValidId(purchaseId) && isValidPurchase(incoming());
+      allow update: if isValidId(purchaseId) && isValidPurchase(incoming());
+      allow delete: if false;
+    }
+
+    // Company Bank & Cash Accounts
+    match /bank_accounts/{accId} {
+      allow read: if true;
+      allow create: if isValidId(accId) && isValidBankAccount(incoming());
+      allow update: if isValidId(accId) && isValidBankAccount(incoming());
+      allow delete: if false;
+    }
+
+    // Bank Contra Transfers
+    match /contra_entries/{contraId} {
+      allow read: if true;
+      allow create: if isValidId(contraId) && isValidContra(incoming());
+      allow update: if isValidId(contraId) && isValidContra(incoming());
+      allow delete: if false;
+    }
+
+    // General Ledger Account Heads
+    match /account_heads/{headId} {
+      allow read: if true;
+      allow create: if isValidId(headId) && isValidAccountHead(incoming());
+      allow update: if isValidId(headId) && isValidAccountHead(incoming());
+      allow delete: if false;
+    }
+
+    // Double-Entry Journal Vouchers
+    match /journal_vouchers/{jvId} {
+      allow read: if true;
+      allow create: if isValidId(jvId) && isValidJournalEntry(incoming());
+      allow update: if isValidId(jvId) && isValidJournalEntry(incoming());
       allow delete: if false;
     }
   }

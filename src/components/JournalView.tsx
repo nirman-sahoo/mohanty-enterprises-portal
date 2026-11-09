@@ -2,57 +2,24 @@ import React, { useState } from 'react';
 import { 
   BookOpen, 
   Plus, 
-  Download, 
-  Printer, 
   Search, 
-  CheckCircle2, 
-  Calendar, 
   X,
-  ArrowRight
 } from 'lucide-react';
 import { JournalEntry } from '../types';
 import { formatINR } from '../data/inventoryData';
 
-const INITIAL_JV: JournalEntry[] = [
-  {
-    id: 'jv-1',
-    jvNo: 'JV-2026-0034',
-    date: '2026-11-06',
-    debitAccount: 'Vehicle Depreciation & Amortization A/C',
-    debitAmount: 18000,
-    creditAccount: 'Delivery Trucks & Tippers Fixed Asset A/C',
-    creditAmount: 18000,
-    narration: 'Monthly vehicle wear & tear depreciation booked as per Companies Act schedule',
-    authorizedBy: 'Ayushman Mohanty'
-  },
-  {
-    id: 'jv-2',
-    jvNo: 'JV-2026-0033',
-    date: '2026-11-04',
-    debitAccount: 'Cement Bag Transit Spillage & Handling Loss A/C',
-    debitAmount: 6400,
-    creditAccount: 'Warehouse Material Stock Inventory',
-    creditAmount: 6400,
-    narration: '16 bags torn packaging written off during rail siding unloading',
-    authorizedBy: 'Ayushman Mohanty'
-  },
-  {
-    id: 'jv-3',
-    jvNo: 'JV-2026-0032',
-    date: '2026-11-01',
-    debitAccount: 'Prepaid Warehouse Commercial Insurance A/C',
-    debitAmount: 45000,
-    creditAccount: 'Sundry Liabilities & Accruals A/C',
-    creditAmount: 45000,
-    narration: 'Annual stock fire & burglary insurance renewal provision',
-    authorizedBy: 'Ayushman Mohanty'
-  }
-];
+interface JournalViewProps {
+  entries: JournalEntry[];
+  onSaveEntry: (entry: JournalEntry) => Promise<void>;
+}
 
-export const JournalView: React.FC = () => {
-  const [jvs, setJvs] = useState<JournalEntry[]>(INITIAL_JV);
+export const JournalView: React.FC<JournalViewProps> = ({
+  entries,
+  onSaveEntry
+}) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Form
   const [formData, setFormData] = useState({
@@ -64,21 +31,22 @@ export const JournalView: React.FC = () => {
     date: new Date().toISOString().split('T')[0]
   });
 
-  const filtered = jvs.filter(j => 
+  const filtered = entries.filter(j => 
     j.jvNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
     j.narration.toLowerCase().includes(searchTerm.toLowerCase()) ||
     j.debitAccount.toLowerCase().includes(searchTerm.toLowerCase()) ||
     j.creditAccount.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleAddJV = (e: React.FormEvent) => {
+  const handleAddJV = async (e: React.FormEvent) => {
     e.preventDefault();
     const amt = parseFloat(formData.debitAmount);
     if (!formData.debitAccount || !formData.creditAccount || !amt) return;
 
+    setIsSubmitting(true);
     const newJV: JournalEntry = {
       id: `jv-${Date.now()}`,
-      jvNo: `JV-2026-${String(jvs.length + 35).padStart(4, '0')}`,
+      jvNo: `JV-2026-${String(entries.length + 1).padStart(4, '0')}`,
       date: formData.date,
       debitAccount: formData.debitAccount,
       debitAmount: amt,
@@ -88,16 +56,20 @@ export const JournalView: React.FC = () => {
       authorizedBy: 'Ayushman Mohanty'
     };
 
-    setJvs([newJV, ...jvs]);
-    setIsAddModalOpen(false);
-    setFormData({
-      debitAccount: '',
-      debitAmount: '',
-      creditAccount: '',
-      creditAmount: '',
-      narration: '',
-      date: new Date().toISOString().split('T')[0]
-    });
+    try {
+      await onSaveEntry(newJV);
+      setIsAddModalOpen(false);
+      setFormData({
+        debitAccount: '',
+        debitAmount: '',
+        creditAccount: '',
+        creditAmount: '',
+        narration: '',
+        date: new Date().toISOString().split('T')[0]
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -113,7 +85,7 @@ export const JournalView: React.FC = () => {
               Journal Vouchers (JV) Register
             </h1>
             <p className="text-xs text-slate-500 font-medium">
-              Double-entry adjustments, transit spillage loss, depreciation, and month-end closing entries
+              Double-entry adjustments, transit spillage loss, depreciation, and month-end closing entries recorded live in database
             </p>
           </div>
         </div>
@@ -156,21 +128,31 @@ export const JournalView: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filtered.map((j) => (
-                <tr key={j.id} className="hover:bg-slate-50/75 transition-colors">
-                  <td className="py-3.5 px-4 font-mono font-bold text-slate-800">{j.jvNo}</td>
-                  <td className="py-3.5 px-4 text-slate-500 font-mono">{j.date}</td>
-                  <td className="py-3.5 px-4 font-bold text-blue-700">{j.debitAccount}</td>
-                  <td className="py-3.5 px-4 font-bold text-purple-700">{j.creditAccount}</td>
-                  <td className="py-3.5 px-4 text-right font-black text-slate-900">{formatINR(j.debitAmount)}</td>
-                  <td className="py-3.5 px-4 text-slate-600 max-w-xs">{j.narration}</td>
-                  <td className="py-3.5 px-4 text-center">
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
-                      Approved
-                    </span>
+              {filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-12 text-center text-slate-400">
+                    <BookOpen className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                    <p className="font-semibold text-slate-700">No Journal Vouchers recorded yet</p>
+                    <p className="text-xs text-slate-400 mt-0.5">Click &ldquo;+ Create Journal Voucher&rdquo; to post non-cash double-entry bookkeeping transactions.</p>
                   </td>
                 </tr>
-              ))}
+              ) : (
+                filtered.map((j) => (
+                  <tr key={j.id} className="hover:bg-slate-50/75 transition-colors">
+                    <td className="py-3.5 px-4 font-mono font-bold text-slate-800">{j.jvNo}</td>
+                    <td className="py-3.5 px-4 text-slate-500 font-mono">{j.date}</td>
+                    <td className="py-3.5 px-4 font-bold text-blue-700">{j.debitAccount}</td>
+                    <td className="py-3.5 px-4 font-bold text-purple-700">{j.creditAccount}</td>
+                    <td className="py-3.5 px-4 text-right font-black text-slate-900">{formatINR(j.debitAmount)}</td>
+                    <td className="py-3.5 px-4 text-slate-600 max-w-xs">{j.narration}</td>
+                    <td className="py-3.5 px-4 text-center">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                        Approved
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -265,9 +247,10 @@ export const JournalView: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-[#F6B118] hover:bg-[#E5A010] text-slate-950 font-bold rounded-lg shadow-sm transition-all cursor-pointer"
+                  disabled={isSubmitting}
+                  className="px-5 py-2 bg-[#F6B118] hover:bg-[#E5A010] text-slate-950 font-bold rounded-lg shadow-sm transition-all cursor-pointer disabled:opacity-50"
                 >
-                  Post Journal Voucher
+                  {isSubmitting ? 'Posting...' : 'Post Journal Voucher'}
                 </button>
               </div>
             </form>

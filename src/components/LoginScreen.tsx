@@ -6,33 +6,38 @@ import {
   EyeOff, 
   LogIn, 
   Headphones, 
-  Mail 
+  Mail,
+  AlertCircle
 } from 'lucide-react';
 
 interface LoginScreenProps {
   onLogin: (username: string) => void;
 }
 
+const VALID_USER_ID = '9438758075';
+const VALID_PASSWORD = 'ME@2026';
+
 export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMessage('');
     setIsLoading(true);
 
     setTimeout(() => {
       setIsLoading(false);
-      const finalUser = username.trim() || 'Ayushman Mohanty';
-      onLogin(finalUser);
-    }, 350);
-  };
-
-  const handleQuickDemo = () => {
-    setUsername('ayushman.mohanty');
-    setPassword('terminal@2026');
+      const trimmedUser = username.trim();
+      if (trimmedUser === VALID_USER_ID && password === VALID_PASSWORD) {
+        onLogin('Ayushman Mohanty');
+      } else {
+        setErrorMessage('Invalid User ID or Password. Please try again.');
+      }
+    }, 300);
   };
 
   return (
@@ -82,15 +87,23 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
             </h2>
 
             {/* Subtitle with Golden Horizontal Accents */}
-            <div className="flex items-center justify-center gap-1.5 sm:gap-2 text-[8.5px] sm:text-[9.5px] md:text-[10px] lg:text-[11px] font-bold text-slate-700 tracking-wider uppercase mt-1 mb-3 sm:mb-4 lg:mb-5">
+            <div className="flex items-center justify-center gap-1.5 sm:gap-2 text-[8.5px] sm:text-[9.5px] md:text-[10px] lg:text-[11px] font-bold text-slate-700 tracking-wider uppercase mt-1 mb-2 sm:mb-3">
               <span className="h-[1.5px] w-5 sm:w-7 lg:w-9 bg-[#F5A623]"></span>
               <span className="truncate">CEMENT • STEEL • CONSTRUCTION MATERIALS</span>
               <span className="h-[1.5px] w-5 sm:w-7 lg:w-9 bg-[#F5A623]"></span>
             </div>
+
+            {/* Error Message if credentials fail */}
+            {errorMessage && (
+              <div className="flex items-center justify-center gap-1.5 px-2.5 py-1 mb-2 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-[10px] sm:text-[11px] font-bold animate-in fade-in">
+                <AlertCircle className="w-3.5 h-3.5 shrink-0 text-rose-600" />
+                <span className="truncate">{errorMessage}</span>
+              </div>
+            )}
           </div>
 
           {/* Interactive Form with Username, Password and Sign In */}
-          <form onSubmit={handleSubmit} className="space-y-1.5 sm:space-y-2 lg:space-y-2.5">
+          <form onSubmit={handleSubmit} className="space-y-2 sm:space-y-2.5 lg:space-y-3">
             {/* Username Input Box */}
             <div className="relative flex items-center rounded-lg sm:rounded-xl border border-slate-300 bg-white focus-within:border-[#F5A623] focus-within:ring-2 focus-within:ring-[#F5A623]/25 transition-all">
               <div className="pl-2.5 sm:pl-3 pr-1.5 sm:pr-2 text-slate-900">
@@ -98,9 +111,13 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
               </div>
               <input
                 type="text"
+                required
                 value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Enter your username"
+                onChange={(e) => {
+                  setUsername(e.target.value);
+                  if (errorMessage) setErrorMessage('');
+                }}
+                placeholder="Enter your user ID"
                 className="w-full py-1.5 sm:py-2 md:py-2.5 pr-2.5 text-[11px] sm:text-xs md:text-sm text-slate-900 placeholder:text-slate-400 bg-transparent focus:outline-none font-medium"
               />
             </div>
@@ -112,8 +129,12 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
               </div>
               <input
                 type={showPassword ? 'text' : 'password'}
+                required
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  if (errorMessage) setErrorMessage('');
+                }}
                 placeholder="Enter your password"
                 className="w-full py-1.5 sm:py-2 md:py-2.5 pr-2 text-[11px] sm:text-xs md:text-sm text-slate-900 placeholder:text-slate-400 bg-transparent focus:outline-none font-medium"
               />
@@ -158,37 +179,25 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
             </button>
           </form>
 
-            {/* Quick Demo Credentials Helper */}
-            <div className="flex items-center justify-between text-[9px] sm:text-[10px] md:text-[11px] text-slate-400 mt-0.5">
-              <span>Wholesale Terminal Access</span>
-              <button
-                type="button"
-                onClick={handleQuickDemo}
-                className="text-amber-600 hover:text-amber-700 font-semibold cursor-pointer underline"
+          {/* Customer Support & Contact Info */}
+          <div className="pt-1.5 sm:pt-2 border-t border-slate-100">
+            {/* Divider with Headphones Icon & "Customer Support" */}
+            <div className="flex items-center justify-center gap-1 text-slate-800 text-[9px] sm:text-[10px] md:text-[11px] font-bold mb-0.5">
+              <Headphones className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-slate-800 stroke-[2.2]" />
+              <span>Customer Support</span>
+            </div>
+
+            {/* Support Email */}
+            <div className="flex items-center justify-center gap-1 text-[9px] sm:text-[10px] md:text-[11px] font-semibold text-slate-900">
+              <Mail className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-slate-800 stroke-[2.2] shrink-0" />
+              <a 
+                href="mailto:mohantyenterprises.ayushman@gmail.com" 
+                className="hover:text-amber-600 transition-colors truncate"
               >
-                Fill Demo Credentials
-              </button>
+                mohantyenterprises.ayushman@gmail.com
+              </a>
             </div>
-
-            {/* Customer Support & Contact Info */}
-            <div className="pt-1 sm:pt-1.5 border-t border-slate-100">
-              {/* Divider with Headphones Icon & "Customer Support" */}
-              <div className="flex items-center justify-center gap-1 text-slate-800 text-[9px] sm:text-[10px] md:text-[11px] font-bold mb-0.5">
-                <Headphones className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-slate-800 stroke-[2.2]" />
-                <span>Customer Support</span>
-              </div>
-
-              {/* Support Email */}
-              <div className="flex items-center justify-center gap-1 text-[9px] sm:text-[10px] md:text-[11px] font-semibold text-slate-900">
-                <Mail className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-slate-800 stroke-[2.2] shrink-0" />
-                <a 
-                  href="mailto:mohantyenterprises.ayushman@gmail.com" 
-                  className="hover:text-amber-600 transition-colors truncate"
-                >
-                  mohantyenterprises.ayushman@gmail.com
-                </a>
-              </div>
-            </div>
+          </div>
         </div>
       </div>
     </div>

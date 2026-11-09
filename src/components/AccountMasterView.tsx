@@ -3,48 +3,24 @@ import {
   LayoutDashboard, 
   Plus, 
   Search, 
-  FolderTree, 
-  CheckCircle2, 
-  Download, 
   X,
-  IndianRupee,
-  Building2,
-  TrendingUp,
-  CreditCard
 } from 'lucide-react';
+import { AccountHead } from '../types';
 import { formatINR } from '../data/inventoryData';
 
-interface AccountHead {
-  id: string;
-  code: string;
-  name: string;
-  group: 'Current Assets' | 'Fixed Assets' | 'Current Liabilities' | 'Direct Incomes' | 'Direct Expenses' | 'Indirect Expenses';
-  balance: number;
-  balanceType: 'Dr' | 'Cr';
+interface AccountMasterViewProps {
+  accounts: AccountHead[];
+  onSaveAccount: (acc: AccountHead) => Promise<void>;
 }
 
-const INITIAL_ACCOUNTS: AccountHead[] = [
-  { id: 'acc-1', code: '1001', name: 'State Bank of India (Current A/C)', group: 'Current Assets', balance: 1850000, balanceType: 'Dr' },
-  { id: 'acc-2', code: '1002', name: 'HDFC Corporate Current A/C', group: 'Current Assets', balance: 640000, balanceType: 'Dr' },
-  { id: 'acc-3', code: '1003', name: 'Office Safe Cash Drawer', group: 'Current Assets', balance: 34500, balanceType: 'Dr' },
-  { id: 'acc-4', code: '1004', name: 'Sundry Debtors (Wholesale Contractors)', group: 'Current Assets', balance: 1425000, balanceType: 'Dr' },
-  { id: 'acc-5', code: '1005', name: 'Warehouse Material Stock Inventory', group: 'Current Assets', balance: 3840000, balanceType: 'Dr' },
-  { id: 'acc-6', code: '2001', name: 'UltraTech Cement Ltd (Sundry Creditor)', group: 'Current Liabilities', balance: 410000, balanceType: 'Cr' },
-  { id: 'acc-7', code: '2002', name: 'SCAN Steels Ltd (Sundry Creditor)', group: 'Current Liabilities', balance: 520000, balanceType: 'Cr' },
-  { id: 'acc-8', code: '2003', name: 'GST Output Liability (18% & 28%)', group: 'Current Liabilities', balance: 182400, balanceType: 'Cr' },
-  { id: 'acc-9', code: '3001', name: 'Sales Account - Cement Wholesale', group: 'Direct Incomes', balance: 2450000, balanceType: 'Cr' },
-  { id: 'acc-10', code: '3002', name: 'Sales Account - SCAN TMT Bars', group: 'Direct Incomes', balance: 3120000, balanceType: 'Cr' },
-  { id: 'acc-11', code: '4001', name: 'Yard Labour & Hamali Charges', group: 'Direct Expenses', balance: 68500, balanceType: 'Dr' },
-  { id: 'acc-12', code: '4002', name: 'Truck Diesel & Delivery Freight', group: 'Direct Expenses', balance: 124000, balanceType: 'Dr' },
-  { id: 'acc-13', code: '5001', name: 'Warehouse Power & Electricity', group: 'Indirect Expenses', balance: 34200, balanceType: 'Dr' },
-  { id: 'acc-14', code: '5002', name: 'Vehicle Maintenance & Repairs', group: 'Indirect Expenses', balance: 28400, balanceType: 'Dr' }
-];
-
-export const AccountMasterView: React.FC = () => {
-  const [accounts, setAccounts] = useState<AccountHead[]>(INITIAL_ACCOUNTS);
+export const AccountMasterView: React.FC<AccountMasterViewProps> = ({
+  accounts,
+  onSaveAccount
+}) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedGroup, setSelectedGroup] = useState<string>('ALL');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -61,10 +37,11 @@ export const AccountMasterView: React.FC = () => {
     return matchesSearch && matchesGroup;
   });
 
-  const handleAddAccount = (e: React.FormEvent) => {
+  const handleAddAccount = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name) return;
 
+    setIsSubmitting(true);
     const newAcc: AccountHead = {
       id: `acc-${Date.now()}`,
       code: formData.code || String(1000 + accounts.length + 1),
@@ -74,15 +51,19 @@ export const AccountMasterView: React.FC = () => {
       balanceType: formData.balanceType
     };
 
-    setAccounts([...accounts, newAcc]);
-    setIsAddModalOpen(false);
-    setFormData({
-      code: '',
-      name: '',
-      group: 'Current Assets',
-      balance: '',
-      balanceType: 'Dr'
-    });
+    try {
+      await onSaveAccount(newAcc);
+      setIsAddModalOpen(false);
+      setFormData({
+        code: '',
+        name: '',
+        group: 'Current Assets',
+        balance: '',
+        balanceType: 'Dr'
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -155,27 +136,37 @@ export const AccountMasterView: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filtered.map((acc) => (
-                <tr key={acc.id} className="hover:bg-slate-50/75 transition-colors">
-                  <td className="py-3 px-4 font-mono font-bold text-slate-700">{acc.code}</td>
-                  <td className="py-3 px-4 font-bold text-slate-900">{acc.name}</td>
-                  <td className="py-3 px-4">
-                    <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
-                      {acc.group}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4 text-right font-mono font-black text-slate-900">
-                    {formatINR(acc.balance)}
-                  </td>
-                  <td className="py-3 px-4 text-center">
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                      acc.balanceType === 'Dr' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'
-                    }`}>
-                      {acc.balanceType}
-                    </span>
+              {filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="py-12 text-center text-slate-400">
+                    <LayoutDashboard className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                    <p className="font-semibold text-slate-700">No ledger heads matching filter</p>
+                    <p className="text-xs text-slate-400 mt-0.5">Click &ldquo;+ Add Ledger Head&rdquo; to create chart of accounts entries.</p>
                   </td>
                 </tr>
-              ))}
+              ) : (
+                filtered.map((acc) => (
+                  <tr key={acc.id} className="hover:bg-slate-50/75 transition-colors">
+                    <td className="py-3 px-4 font-mono font-bold text-slate-700">{acc.code}</td>
+                    <td className="py-3 px-4 font-bold text-slate-900">{acc.name}</td>
+                    <td className="py-3 px-4">
+                      <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                        {acc.group}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-right font-mono font-black text-slate-900">
+                      {formatINR(acc.balance)}
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        acc.balanceType === 'Dr' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'
+                      }`}>
+                        {acc.balanceType}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -262,9 +253,10 @@ export const AccountMasterView: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-[#F6B118] hover:bg-[#E5A010] text-slate-950 font-bold rounded-lg shadow-sm transition-all cursor-pointer"
+                  disabled={isSubmitting}
+                  className="px-5 py-2 bg-[#F6B118] hover:bg-[#E5A010] text-slate-950 font-bold rounded-lg shadow-sm transition-all cursor-pointer disabled:opacity-50"
                 >
-                  Save Account Head
+                  {isSubmitting ? 'Saving...' : 'Save Account Head'}
                 </button>
               </div>
             </form>

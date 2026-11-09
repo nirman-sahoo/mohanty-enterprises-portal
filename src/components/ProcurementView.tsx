@@ -3,110 +3,25 @@ import {
   ShoppingBag, 
   Plus, 
   Download, 
-  Truck, 
-  Building2, 
-  Boxes, 
-  Calendar, 
-  CheckCircle2, 
-  Clock, 
   Search,
-  Filter,
   X,
-  FileText,
-  IndianRupee,
-  ArrowUpRight
+  Boxes,
+  CheckCircle2
 } from 'lucide-react';
-import { PurchaseRecord, InventoryItem, Category, UnitType } from '../types';
+import { PurchaseRecord, InventoryItem, Category } from '../types';
 import { formatINR } from '../data/inventoryData';
 
 interface ProcurementViewProps {
   inventory: InventoryItem[];
-  onRestockItem: (itemId: string, addQuantity: number) => Promise<void>;
+  purchases: PurchaseRecord[];
+  onSavePurchase: (po: PurchaseRecord) => Promise<void>;
 }
-
-const INITIAL_PURCHASES: PurchaseRecord[] = [
-  {
-    id: 'po-201',
-    purchaseNo: 'PO-2026-0089',
-    supplierName: 'UltraTech Cement Ltd (Jharsuguda Plant)',
-    supplierGst: '21AAACU1234F1Z8',
-    date: '2026-11-05',
-    category: 'CEMENT',
-    items: [
-      {
-        itemId: 'cem-1',
-        itemName: 'UltraTech PPC Cement (50kg)',
-        category: 'CEMENT',
-        quantity: 600,
-        unit: 'Bags',
-        rate: 340,
-        amount: 204000
-      }
-    ],
-    subtotal: 204000,
-    gstAmount: 57120, // 28% cement GST
-    totalAmount: 261120,
-    paymentStatus: 'Paid',
-    truckNumber: 'OD-05-AG-9912',
-    challanNo: 'CH-UT-8834'
-  },
-  {
-    id: 'po-202',
-    purchaseNo: 'PO-2026-0090',
-    supplierName: 'SCAN Steels Ltd (Rajgangpur Unit)',
-    supplierGst: '21AABCS9981K1ZQ',
-    date: '2026-11-04',
-    category: 'SCAN TMT BAR',
-    items: [
-      {
-        itemId: 'tmt-1',
-        itemName: 'SCAN TMT 550D 12mm',
-        category: 'SCAN TMT BAR',
-        quantity: 15,
-        unit: 'Tons',
-        rate: 51000,
-        amount: 765000
-      }
-    ],
-    subtotal: 765000,
-    gstAmount: 137700, // 18% steel GST
-    totalAmount: 902700,
-    paymentStatus: 'Paid',
-    truckNumber: 'OD-14-B-7120',
-    challanNo: 'CH-SS-3312'
-  },
-  {
-    id: 'po-203',
-    purchaseNo: 'PO-2026-0091',
-    supplierName: 'IFFCO Fertilizer Hub (Paradip)',
-    supplierGst: '21AAACI0023B1ZT',
-    date: '2026-11-02',
-    category: 'FERTILIZER',
-    items: [
-      {
-        itemId: 'fert-1',
-        itemName: 'IFFCO Urea 46% N (45kg)',
-        category: 'FERTILIZER',
-        quantity: 400,
-        unit: 'Bags',
-        rate: 245,
-        amount: 98000
-      }
-    ],
-    subtotal: 98000,
-    gstAmount: 4900, // 5% fertilizer GST
-    totalAmount: 102900,
-    paymentStatus: 'Paid',
-    truckNumber: 'OD-02-C-5541',
-    challanNo: 'CH-IF-9011'
-  }
-];
 
 export const ProcurementView: React.FC<ProcurementViewProps> = ({
   inventory,
-  onRestockItem
+  purchases,
+  onSavePurchase
 }) => {
-  const [purchases, setPurchases] = useState<PurchaseRecord[]>(INITIAL_PURCHASES);
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -151,18 +66,18 @@ export const ProcurementView: React.FC<ProcurementViewProps> = ({
 
     const newPO: PurchaseRecord = {
       id: `po-${Date.now()}`,
-      purchaseNo: `PO-2026-${String(purchases.length + 92).padStart(4, '0')}`,
+      purchaseNo: `PO-2026-${String(purchases.length + 1).padStart(4, '0')}`,
       supplierName: formData.supplierName,
       supplierGst: formData.supplierGst,
       date: new Date().toISOString().split('T')[0],
       category: formData.category,
       items: [
         {
-          itemId: selectedItem.id,
-          itemName: selectedItem.name,
+          itemId: selectedItem ? selectedItem.id : 'sku-1',
+          itemName: selectedItem ? selectedItem.name : 'Raw Material Inward',
           category: formData.category,
           quantity: qty,
-          unit: selectedItem.unit,
+          unit: selectedItem ? selectedItem.unit : 'Bags',
           rate,
           amount: subtotal
         }
@@ -175,16 +90,12 @@ export const ProcurementView: React.FC<ProcurementViewProps> = ({
       challanNo: formData.challanNo
     };
 
-    // 1. Restock the item live in Firestore!
     try {
-      await onRestockItem(selectedItem.id, qty);
-    } catch (err) {
-      console.error('Error auto-restocking:', err);
+      await onSavePurchase(newPO);
+      setIsAddModalOpen(false);
+    } finally {
+      setIsSubmitting(false);
     }
-
-    setPurchases([newPO, ...purchases]);
-    setIsSubmitting(false);
-    setIsAddModalOpen(false);
   };
 
   const handleExportCSV = () => {
@@ -225,7 +136,7 @@ export const ProcurementView: React.FC<ProcurementViewProps> = ({
               Material Purchase & Procurement Register
             </h1>
             <p className="text-xs text-slate-500 font-medium">
-              Inward raw consignments from cement plants, steel mills, and fertilizer manufacturers
+              Inward raw consignments from cement plants, steel mills, and fertilizer manufacturers recorded live in database
             </p>
           </div>
         </div>
@@ -253,7 +164,7 @@ export const ProcurementView: React.FC<ProcurementViewProps> = ({
         <div className="bg-white p-5 rounded-xl border border-slate-200/90 shadow-2xs">
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Gross Procurement Value</p>
           <p className="text-2xl font-bold text-slate-900 mt-1">{formatINR(totalProcurement)}</p>
-          <p className="text-[11px] text-slate-400 mt-1">{purchases.length} bulk manufacturer consignments</p>
+          <p className="text-[11px] text-slate-400 mt-1">{purchases.length} recorded consignments</p>
         </div>
 
         <div className="bg-white p-5 rounded-xl border border-slate-200/90 shadow-2xs">
@@ -319,8 +230,10 @@ export const ProcurementView: React.FC<ProcurementViewProps> = ({
             <tbody className="divide-y divide-slate-100">
               {filteredPurchases.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-slate-400">
-                    No procurement records found.
+                  <td colSpan={8} className="py-12 text-center text-slate-400">
+                    <ShoppingBag className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                    <p className="font-semibold text-slate-700">No inward consignments recorded yet</p>
+                    <p className="text-xs text-slate-400 mt-0.5">Click &ldquo;+ Inward Consignment&rdquo; to record material procurement and auto-restock inventory.</p>
                   </td>
                 </tr>
               ) : (

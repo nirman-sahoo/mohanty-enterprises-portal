@@ -48,7 +48,7 @@ export const PartyStatementModal: React.FC<PartyStatementModalProps> = ({
 
   const totalDebit = filteredEntries.reduce((acc, e) => acc + (e.debit || 0), 0);
   const totalCredit = filteredEntries.reduce((acc, e) => acc + (e.credit || 0), 0);
-  const openingBalance = 1093700; // As in Khatabook reference sample
+  const openingBalance = ledger.openingBalance || 0;
   const netBalance = openingBalance + totalDebit - totalCredit;
 
   const handleWhatsAppShare = () => {
