@@ -5,6 +5,7 @@ import {
   getDoc, 
   getDocs, 
   updateDoc, 
+  deleteDoc,
   onSnapshot, 
   query, 
   orderBy,
@@ -1086,4 +1087,118 @@ export async function saveJournalEntryInDb(entry: JournalEntry): Promise<void> {
     handleFirestoreError(err, OperationType.WRITE, colPath);
   }
 }
+
+// ==========================================
+// DELETION HANDLERS FOR PRODUCTION ENTRIES
+// ==========================================
+
+export async function deleteOrderInDb(
+  orderId: string,
+  sale?: SaleRecord,
+  currentInventory?: InventoryItem[],
+  currentLedgers?: CustomerLedger[]
+): Promise<void> {
+  const colPath = 'orders';
+  try {
+    // 1. Delete order doc
+    await deleteDoc(doc(db, colPath, orderId));
+
+    // 2. Optionally restore stock levels if sale item details are provided
+    if (sale && currentInventory) {
+      if (sale.items && sale.items.length > 0) {
+        for (const item of sale.items) {
+          const inv = currentInventory.find(i => i.name === item.itemDescription || i.id === item.id);
+          if (inv) {
+            const restoredStock = inv.stockLevel + item.quantity;
+            await updateDoc(doc(db, 'inventory', inv.id), {
+              stockLevel: restoredStock,
+              isCriticalLow: restoredStock <= inv.reorderLevel,
+              updatedAt: new Date().toISOString(),
+            }).catch(e => console.warn('Could not restore stock:', e));
+          }
+        }
+      }
+    }
+
+    // 3. Optionally reverse ledger billed balance
+    if (sale && currentLedgers) {
+      const party = currentLedgers.find(l => l.name.toLowerCase() === sale.customerName.toLowerCase());
+      if (party) {
+        const newBilled = Math.max(0, party.totalBilled - sale.totalAmount);
+        const newReceivable = Math.max(0, party.outstandingReceivable - sale.totalAmount);
+        await updateDoc(doc(db, 'ledgers', party.id), {
+          totalBilled: newBilled,
+          outstandingReceivable: newReceivable,
+          updatedAt: new Date().toISOString(),
+        }).catch(e => console.warn('Could not adjust ledger on delete:', e));
+      }
+    }
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, colPath);
+  }
+}
+
+export async function deletePurchaseInDb(purchaseId: string): Promise<void> {
+  const colPath = 'purchases';
+  try {
+    await deleteDoc(doc(db, colPath, purchaseId));
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, colPath);
+  }
+}
+
+export async function deleteExpenseInDb(expenseId: string): Promise<void> {
+  const colPath = 'expenses';
+  try {
+    await deleteDoc(doc(db, colPath, expenseId));
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, colPath);
+  }
+}
+
+export async function deleteJournalEntryInDb(jvId: string): Promise<void> {
+  const colPath = 'journal_vouchers';
+  try {
+    await deleteDoc(doc(db, colPath, jvId));
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, colPath);
+  }
+}
+
+export async function deleteEmployeeInDb(employeeId: string): Promise<void> {
+  const colPath = 'employees';
+  try {
+    await deleteDoc(doc(db, colPath, employeeId));
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, colPath);
+  }
+}
+
+export async function deleteLedgerInDb(ledgerId: string): Promise<void> {
+  const colPath = 'ledgers';
+  try {
+    await deleteDoc(doc(db, colPath, ledgerId));
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, colPath);
+  }
+}
+
+export async function deleteContraEntryInDb(contraId: string): Promise<void> {
+  const colPath = 'contra_entries';
+  try {
+    await deleteDoc(doc(db, colPath, contraId));
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, colPath);
+  }
+}
+
+export async function deleteAccountHeadInDb(headId: string): Promise<void> {
+  const colPath = 'account_heads';
+  try {
+    await deleteDoc(doc(db, colPath, headId));
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, colPath);
+  }
+}
+
 

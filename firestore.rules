@@ -92,13 +92,13 @@ service cloud.firestore {
     }
 
     function isValidBankAccount(data) {
-      return data.accountNo is string && data.accountNo.size() <= 64 &&
+      return (data.accountNumber is string || data.accountNo is string) &&
              data.bankName is string &&
              data.currentBalance is number;
     }
 
     function isValidContra(data) {
-      return data.contraNo is string && data.contraNo.size() <= 64 &&
+      return (data.voucherNo is string || data.contraNo is string) &&
              data.amount is number &&
              data.fromAccount is string &&
              data.toAccount is string;
@@ -121,7 +121,7 @@ service cloud.firestore {
       allow read: if true;
       allow create: if isValidId(itemId) && isValidInventory(incoming());
       allow update: if isValidId(itemId) && isValidInventory(incoming());
-      allow delete: if false;
+      allow delete: if isValidId(itemId);
     }
 
     // Commercial Orders & Invoices
@@ -129,7 +129,7 @@ service cloud.firestore {
       allow read: if true;
       allow create: if isValidId(orderId) && isValidOrder(incoming());
       allow update: if isValidId(orderId) && isValidOrder(incoming());
-      allow delete: if false;
+      allow delete: if isValidId(orderId);
     }
 
     // Khatabook Party Directory & Balances
@@ -137,7 +137,7 @@ service cloud.firestore {
       allow read: if true;
       allow create: if isValidId(ledgerId) && isValidLedger(incoming());
       allow update: if isValidId(ledgerId) && isValidLedger(incoming());
-      allow delete: if false;
+      allow delete: if isValidId(ledgerId);
     }
 
     // Official Payment Receipt Vouchers
@@ -145,7 +145,7 @@ service cloud.firestore {
       allow read: if true;
       allow create: if isValidId(receiptId) && isValidReceipt(incoming());
       allow update: if isValidId(receiptId) && isValidReceipt(incoming());
-      allow delete: if false;
+      allow delete: if isValidId(receiptId);
     }
 
     // Employee Master Records
@@ -153,7 +153,7 @@ service cloud.firestore {
       allow read: if true;
       allow create: if isValidId(empId) && isValidEmployee(incoming());
       allow update: if isValidId(empId) && isValidEmployee(incoming());
-      allow delete: if false;
+      allow delete: if isValidId(empId);
     }
 
     // Daily Attendance Logs
@@ -161,7 +161,7 @@ service cloud.firestore {
       allow read: if true;
       allow create: if isValidId(logId) && isValidAttendance(incoming());
       allow update: if isValidId(logId) && isValidAttendance(incoming());
-      allow delete: if false;
+      allow delete: if isValidId(logId);
     }
 
     // Monthly Payroll Records
@@ -169,7 +169,7 @@ service cloud.firestore {
       allow read: if true;
       allow create: if isValidId(recordId) && isValidPayroll(incoming());
       allow update: if isValidId(recordId) && isValidPayroll(incoming());
-      allow delete: if false;
+      allow delete: if isValidId(recordId);
     }
 
     // Staff Leave Requests
@@ -177,7 +177,7 @@ service cloud.firestore {
       allow read: if true;
       allow create: if isValidId(requestId) && isValidLeave(incoming());
       allow update: if isValidId(requestId) && isValidLeave(incoming());
-      allow delete: if false;
+      allow delete: if isValidId(requestId);
     }
 
     // Operational Expenses
@@ -185,7 +185,7 @@ service cloud.firestore {
       allow read: if true;
       allow create: if isValidId(expenseId) && isValidExpense(incoming());
       allow update: if isValidId(expenseId) && isValidExpense(incoming());
-      allow delete: if false;
+      allow delete: if isValidId(expenseId);
     }
 
     // Supplier Purchases & Procurement
@@ -193,7 +193,7 @@ service cloud.firestore {
       allow read: if true;
       allow create: if isValidId(purchaseId) && isValidPurchase(incoming());
       allow update: if isValidId(purchaseId) && isValidPurchase(incoming());
-      allow delete: if false;
+      allow delete: if isValidId(purchaseId);
     }
 
     // Company Bank & Cash Accounts
@@ -201,7 +201,7 @@ service cloud.firestore {
       allow read: if true;
       allow create: if isValidId(accId) && isValidBankAccount(incoming());
       allow update: if isValidId(accId) && isValidBankAccount(incoming());
-      allow delete: if false;
+      allow delete: if isValidId(accId);
     }
 
     // Bank Contra Transfers
@@ -209,7 +209,7 @@ service cloud.firestore {
       allow read: if true;
       allow create: if isValidId(contraId) && isValidContra(incoming());
       allow update: if isValidId(contraId) && isValidContra(incoming());
-      allow delete: if false;
+      allow delete: if isValidId(contraId);
     }
 
     // General Ledger Account Heads
@@ -217,7 +217,7 @@ service cloud.firestore {
       allow read: if true;
       allow create: if isValidId(headId) && isValidAccountHead(incoming());
       allow update: if isValidId(headId) && isValidAccountHead(incoming());
-      allow delete: if false;
+      allow delete: if isValidId(headId);
     }
 
     // Double-Entry Journal Vouchers
@@ -225,7 +225,7 @@ service cloud.firestore {
       allow read: if true;
       allow create: if isValidId(jvId) && isValidJournalEntry(incoming());
       allow update: if isValidId(jvId) && isValidJournalEntry(incoming());
-      allow delete: if false;
+      allow delete: if isValidId(jvId);
     }
   }
 }

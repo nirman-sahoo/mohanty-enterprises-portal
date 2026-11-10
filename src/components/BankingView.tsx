@@ -5,19 +5,21 @@ import {
   ArrowLeftRight, 
   CheckCircle2, 
   Clock, 
-  Plus, 
   Download, 
   X,
-  ShieldCheck
+  ShieldCheck,
+  Trash2
 } from 'lucide-react';
 import { BankAccount, ContraEntry } from '../types';
 import { formatINR } from '../data/inventoryData';
+import { DeleteConfirmModal } from './common/DeleteConfirmModal';
 
 interface BankingViewProps {
   accounts: BankAccount[];
   contraEntries: ContraEntry[];
   onSaveAccount: (account: BankAccount) => Promise<void>;
   onSaveContra: (entry: ContraEntry) => Promise<void>;
+  onDeleteContra?: (entry: ContraEntry) => Promise<void>;
 }
 
 export const BankingView: React.FC<BankingViewProps> = ({
@@ -25,10 +27,13 @@ export const BankingView: React.FC<BankingViewProps> = ({
   contraEntries,
   onSaveAccount,
   onSaveContra,
+  onDeleteContra,
 }) => {
   const [activeTab, setActiveTab] = useState<'accounts' | 'reconciliation' | 'contra'>('accounts');
   const [isContraModalOpen, setIsContraModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [contraToDelete, setContraToDelete] = useState<ContraEntry | null>(null);
+  const [isDeletingContra, setIsDeletingContra] = useState(false);
 
   // Form State
   const [contraForm, setContraForm] = useState({
@@ -72,6 +77,19 @@ export const BankingView: React.FC<BankingViewProps> = ({
       });
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleConfirmDeleteContra = async () => {
+    if (!contraToDelete || !onDeleteContra) return;
+    try {
+      setIsDeletingContra(true);
+      await onDeleteContra(contraToDelete);
+      setContraToDelete(null);
+    } catch (err) {
+      console.error('Failed to delete contra entry:', err);
+    } finally {
+      setIsDeletingContra(false);
     }
   };
 
@@ -204,12 +222,13 @@ export const BankingView: React.FC<BankingViewProps> = ({
                     <th className="py-3.5 px-4 text-right">Amount (₹)</th>
                     <th className="py-3.5 px-4">Cheque / Ref No</th>
                     <th className="py-3.5 px-4">Narration / Remarks</th>
+                    <th className="py-3.5 px-4 text-center">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {contraEntries.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-12 text-center text-slate-400">
+                      <td colSpan={8} className="py-12 text-center text-slate-400">
                         <ArrowLeftRight className="w-8 h-8 text-slate-300 mx-auto mb-2" />
                         <p className="font-semibold text-slate-700">No Contra entries recorded yet</p>
                         <p className="text-xs text-slate-400 mt-0.5">Click &ldquo;+ Post Contra Transfer&rdquo; to move funds between bank accounts and cash drawers.</p>
@@ -225,6 +244,16 @@ export const BankingView: React.FC<BankingViewProps> = ({
                         <td className="py-3 px-4 text-right font-black text-slate-900">{formatINR(c.amount)}</td>
                         <td className="py-3 px-4 font-mono text-slate-600">{c.referenceNo}</td>
                         <td className="py-3 px-4 text-slate-600">{c.remarks}</td>
+                        <td className="py-3 px-4 text-center">
+                          <button
+                            type="button"
+                            onClick={() => setContraToDelete(c)}
+                            title="Delete Contra Entry"
+                            className="inline-flex items-center justify-center p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
                       </tr>
                     ))
                   )}
@@ -393,6 +422,19 @@ export const BankingView: React.FC<BankingViewProps> = ({
             </form>
           </div>
         </div>
+      )}
+
+      {/* Delete Confirmation Modal for Contra Entry */}
+      {contraToDelete && (
+        <DeleteConfirmModal
+          isOpen={!!contraToDelete}
+          title="Delete Contra Fund Transfer"
+          message={`Are you sure you want to permanently delete contra transfer ${contraToDelete.voucherNo}? The fund movement record between accounts will be removed.`}
+          itemDetails={`Voucher: ${contraToDelete.voucherNo} • Date: ${contraToDelete.date} • ${contraToDelete.fromAccount} → ${contraToDelete.toAccount} • ${formatINR(contraToDelete.amount)}`}
+          isDeleting={isDeletingContra}
+          onConfirm={handleConfirmDeleteContra}
+          onCancel={() => setContraToDelete(null)}
+        />
       )}
     </div>
   );

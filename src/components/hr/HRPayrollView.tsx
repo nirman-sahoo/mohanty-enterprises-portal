@@ -24,6 +24,7 @@ import {
 import { 
   subscribeToEmployees, 
   saveEmployeeInDb, 
+  deleteEmployeeInDb,
   subscribeToAttendance, 
   recordAttendanceInDb, 
   bulkMarkAttendanceInDb, 
@@ -218,6 +219,9 @@ export const HRPayrollView: React.FC = () => {
           <EmployeeMasterTab
             employees={employees}
             onSaveEmployee={saveEmployeeInDb}
+            onDeleteEmployee={async (emp) => {
+              await deleteEmployeeInDb(emp.id);
+            }}
           />
         )}
 

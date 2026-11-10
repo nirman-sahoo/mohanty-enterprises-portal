@@ -13,10 +13,12 @@ import {
   Calendar,
   Eye,
   CheckCircle2,
-  Clock
+  Clock,
+  Trash2
 } from 'lucide-react';
 import { CustomerLedger, StatementEntry } from '../types';
 import { formatINR, generateLedgerReminderWhatsAppUrl } from '../utils/formatters';
+import { DeleteConfirmModal } from './common/DeleteConfirmModal';
 
 interface LedgerViewProps {
   ledgers: CustomerLedger[];
@@ -24,6 +26,7 @@ interface LedgerViewProps {
   onOpenStatement: (party: CustomerLedger) => void;
   onUpdateFollowUp: (ledgerId: string, nextFollowUpDate: string, note: string) => void;
   onOpenRecordSale: () => void;
+  onDeleteLedger?: (party: CustomerLedger) => Promise<void>;
 }
 
 export const LedgerView: React.FC<LedgerViewProps> = ({
@@ -32,12 +35,15 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
   onOpenStatement,
   onUpdateFollowUp,
   onOpenRecordSale,
+  onDeleteLedger,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedFollowUpParty, setSelectedFollowUpParty] = useState<CustomerLedger | null>(null);
   const [followUpDate, setFollowUpDate] = useState('');
   const [followUpNote, setFollowUpNote] = useState('');
   const [copiedSmsPartyId, setCopiedSmsPartyId] = useState<string | null>(null);
+  const [partyToDelete, setPartyToDelete] = useState<CustomerLedger | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const filteredLedgers = ledgers.filter((party) =>
     party.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -61,6 +67,19 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
     navigator.clipboard.writeText(smsText);
     setCopiedSmsPartyId(party.id);
     setTimeout(() => setCopiedSmsPartyId(null), 2500);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!partyToDelete || !onDeleteLedger) return;
+    try {
+      setIsDeleting(true);
+      await onDeleteLedger(partyToDelete);
+      setPartyToDelete(null);
+    } catch (err) {
+      console.error('Failed to delete party ledger:', err);
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   // Export Excel / CSV
@@ -329,6 +348,15 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
                       >
                         <Eye className="w-4 h-4 stroke-[2.2]" />
                       </button>
+
+                      {/* Delete Ledger button */}
+                      <button
+                        onClick={() => setPartyToDelete(party)}
+                        title="Delete Party Ledger"
+                        className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors cursor-pointer"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -395,6 +423,19 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
             </form>
           </div>
         </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {partyToDelete && (
+        <DeleteConfirmModal
+          isOpen={!!partyToDelete}
+          title="Delete Party Ledger"
+          message={`Are you sure you want to permanently delete the ledger for ${partyToDelete.name}? All historical entries, follow-up logs, and balance records for this party will be removed.`}
+          itemDetails={`Party: ${partyToDelete.name} • GSTIN: ${partyToDelete.gstin || 'Unregistered'} • Outstanding: ${formatINR(partyToDelete.outstandingReceivable)}`}
+          isDeleting={isDeleting}
+          onConfirm={handleConfirmDelete}
+          onCancel={() => setPartyToDelete(null)}
+        />
       )}
     </div>
   );

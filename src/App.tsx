@@ -56,7 +56,14 @@ import {
   subscribeToAccountHeads,
   saveAccountHeadInDb,
   subscribeToJournalEntries,
-  saveJournalEntryInDb
+  saveJournalEntryInDb,
+  deleteOrderInDb,
+  deletePurchaseInDb,
+  deleteExpenseInDb,
+  deleteJournalEntryInDb,
+  deleteLedgerInDb,
+  deleteContraEntryInDb,
+  deleteAccountHeadInDb
 } from './services/firebaseService';
 
 export default function App() {
@@ -270,6 +277,9 @@ export default function App() {
                 onSaveAccount={async (acc) => {
                   await saveAccountHeadInDb(acc);
                 }}
+                onDeleteAccount={async (acc) => {
+                  await deleteAccountHeadInDb(acc.id);
+                }}
               />
             )}
 
@@ -301,6 +311,9 @@ export default function App() {
                 onSavePurchase={async (po) => {
                   await savePurchaseInDb(po, inventory);
                 }}
+                onDeletePurchase={async (po) => {
+                  await deletePurchaseInDb(po.id);
+                }}
               />
             )}
 
@@ -310,6 +323,9 @@ export default function App() {
                 onSaveExpense={async (exp) => {
                   await saveExpenseInDb(exp);
                 }}
+                onDeleteExpense={async (exp) => {
+                  await deleteExpenseInDb(exp.id);
+                }}
               />
             )}
 
@@ -318,6 +334,9 @@ export default function App() {
                 sales={sales}
                 onViewInvoice={(sale) => setSelectedInvoiceForModal(sale)}
                 onOpenRecordSale={() => setIsRecordSaleModalOpen(true)}
+                onDeleteSale={async (sale) => {
+                  await deleteOrderInDb(sale.id, sale, inventory);
+                }}
               />
             )}
 
@@ -336,6 +355,9 @@ export default function App() {
                 onOpenStatement={(party) => setSelectedLedgerForStatement(party)}
                 onUpdateFollowUp={handleUpdateFollowUp}
                 onOpenRecordSale={() => setIsRecordSaleModalOpen(true)}
+                onDeleteLedger={async (party) => {
+                  await deleteLedgerInDb(party.id);
+                }}
               />
             )}
 
@@ -349,6 +371,9 @@ export default function App() {
                 onSaveContra={async (entry) => {
                   await saveContraEntryInDb(entry, bankAccounts);
                 }}
+                onDeleteContra={async (entry) => {
+                  await deleteContraEntryInDb(entry.id);
+                }}
               />
             )}
 
@@ -357,6 +382,9 @@ export default function App() {
                 entries={journalEntries}
                 onSaveEntry={async (entry) => {
                   await saveJournalEntryInDb(entry);
+                }}
+                onDeleteEntry={async (entry) => {
+                  await deleteJournalEntryInDb(entry.id);
                 }}
               />
             )}

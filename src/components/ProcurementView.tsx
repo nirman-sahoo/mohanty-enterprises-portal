@@ -6,26 +6,31 @@ import {
   Search,
   X,
   Boxes,
-  CheckCircle2
+  CheckCircle2,
+  Trash2
 } from 'lucide-react';
 import { PurchaseRecord, InventoryItem, Category } from '../types';
 import { formatINR } from '../data/inventoryData';
+import { DeleteConfirmModal } from './common/DeleteConfirmModal';
 
 interface ProcurementViewProps {
   inventory: InventoryItem[];
   purchases: PurchaseRecord[];
   onSavePurchase: (po: PurchaseRecord) => Promise<void>;
+  onDeletePurchase?: (purchase: PurchaseRecord) => Promise<void>;
 }
 
 export const ProcurementView: React.FC<ProcurementViewProps> = ({
   inventory,
   purchases,
-  onSavePurchase
+  onSavePurchase,
+  onDeletePurchase,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [purchaseToDelete, setPurchaseToDelete] = useState<PurchaseRecord | null>(null);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -225,12 +230,13 @@ export const ProcurementView: React.FC<ProcurementViewProps> = ({
                 <th className="py-3.5 px-4 text-right">Taxable (₹)</th>
                 <th className="py-3.5 px-4 text-right">Total Payable (₹)</th>
                 <th className="py-3.5 px-4 text-center">Status</th>
+                <th className="py-3.5 px-4 text-right">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filteredPurchases.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-400">
+                  <td colSpan={9} className="py-12 text-center text-slate-400">
                     <ShoppingBag className="w-8 h-8 text-slate-300 mx-auto mb-2" />
                     <p className="font-semibold text-slate-700">No inward consignments recorded yet</p>
                     <p className="text-xs text-slate-400 mt-0.5">Click &ldquo;+ Inward Consignment&rdquo; to record material procurement and auto-restock inventory.</p>
@@ -264,6 +270,18 @@ export const ProcurementView: React.FC<ProcurementViewProps> = ({
                         <span>Received</span>
                       </span>
                     </td>
+                    <td className="py-3 px-4 text-right whitespace-nowrap">
+                      {onDeletePurchase && (
+                        <button
+                          onClick={() => setPurchaseToDelete(po)}
+                          className="px-2 py-1 text-xs font-semibold text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded transition-colors cursor-pointer inline-flex items-center gap-1 border border-transparent hover:border-rose-200"
+                          title="Delete Procurement Consignment"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                          <span>Delete</span>
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 ))
               )}
@@ -271,6 +289,26 @@ export const ProcurementView: React.FC<ProcurementViewProps> = ({
           </table>
         </div>
       </div>
+
+      {/* Delete Confirmation Popup */}
+      <DeleteConfirmModal
+        isOpen={!!purchaseToDelete}
+        title="Delete Purchase Consignment"
+        message={`Are you sure you want to permanently delete procurement order ${purchaseToDelete?.purchaseNo} from ${purchaseToDelete?.supplierName}?`}
+        itemDetails={purchaseToDelete ? [
+          { label: 'PO Number', value: purchaseToDelete.purchaseNo },
+          { label: 'Supplier', value: purchaseToDelete.supplierName },
+          { label: 'Total Payable', value: formatINR(purchaseToDelete.totalAmount) },
+          { label: 'Challan', value: purchaseToDelete.challanNo }
+        ] : []}
+        confirmButtonText="Delete Purchase"
+        onConfirm={async () => {
+          if (purchaseToDelete && onDeletePurchase) {
+            await onDeletePurchase(purchaseToDelete);
+          }
+        }}
+        onClose={() => setPurchaseToDelete(null)}
+      />
 
       {/* Inward Modal */}
       {isAddModalOpen && (

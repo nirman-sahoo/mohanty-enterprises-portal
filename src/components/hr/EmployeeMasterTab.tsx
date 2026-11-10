@@ -12,23 +12,29 @@ import {
   CheckCircle2, 
   Clock, 
   X,
-  CreditCard
+  CreditCard,
+  Trash2
 } from 'lucide-react';
 import { Employee, Department, EmployeeStatus } from '../../types';
 import { formatINR } from '../../utils/formatters';
+import { DeleteConfirmModal } from '../common/DeleteConfirmModal';
 
 interface EmployeeMasterTabProps {
   employees: Employee[];
   onSaveEmployee: (employee: Employee) => Promise<void>;
+  onDeleteEmployee?: (employee: Employee) => Promise<void>;
 }
 
 export const EmployeeMasterTab: React.FC<EmployeeMasterTabProps> = ({
   employees,
   onSaveEmployee,
+  onDeleteEmployee,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDept, setSelectedDept] = useState<string>('ALL');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [employeeToDelete, setEmployeeToDelete] = useState<Employee | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Form state for adding/editing an employee
   const [name, setName] = useState('');
@@ -103,6 +109,19 @@ export const EmployeeMasterTab: React.FC<EmployeeMasterTabProps> = ({
     setBankAccount('');
     setPanNo('');
     setEmpCode(`ME-STF-${Math.floor(100 + Math.random() * 900)}`);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!employeeToDelete || !onDeleteEmployee) return;
+    try {
+      setIsDeleting(true);
+      await onDeleteEmployee(employeeToDelete);
+      setEmployeeToDelete(null);
+    } catch (err) {
+      console.error('Failed to delete employee profile:', err);
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   return (
@@ -194,12 +213,13 @@ export const EmployeeMasterTab: React.FC<EmployeeMasterTabProps> = ({
                 <th className="py-3 px-4 text-right">Monthly CTC (₹)</th>
                 <th className="py-3 px-4">Bank & PAN</th>
                 <th className="py-3 px-4 text-center">Status</th>
+                <th className="py-3 px-4 text-center">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-medium">
               {filteredEmployees.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-500">
+                  <td colSpan={9} className="py-12 text-center text-slate-500">
                     <Users className="w-8 h-8 text-slate-300 mx-auto mb-2" />
                     <p className="font-semibold text-slate-700">No employees match this filter</p>
                     <p className="text-xs text-slate-400 mt-0.5">Try adjusting your search criteria or register a new staff member.</p>
@@ -246,6 +266,16 @@ export const EmployeeMasterTab: React.FC<EmployeeMasterTabProps> = ({
                       >
                         {emp.status}
                       </span>
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      <button
+                        type="button"
+                        onClick={() => setEmployeeToDelete(emp)}
+                        title="Delete employee profile"
+                        className="inline-flex items-center justify-center p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </td>
                   </tr>
                 ))
@@ -441,6 +471,19 @@ export const EmployeeMasterTab: React.FC<EmployeeMasterTabProps> = ({
             </form>
           </div>
         </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {employeeToDelete && (
+        <DeleteConfirmModal
+          isOpen={!!employeeToDelete}
+          title="Delete Employee Record"
+          message="Are you sure you want to permanently delete this employee from the directory and payroll master?"
+          itemDetails={`Employee: ${employeeToDelete.name} (${employeeToDelete.empCode}) • Dept: ${employeeToDelete.department}`}
+          isDeleting={isDeleting}
+          onConfirm={handleConfirmDelete}
+          onCancel={() => setEmployeeToDelete(null)}
+        />
       )}
     </div>
   );

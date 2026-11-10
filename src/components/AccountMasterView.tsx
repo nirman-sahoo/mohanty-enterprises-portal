@@ -4,23 +4,29 @@ import {
   Plus, 
   Search, 
   X,
+  Trash2
 } from 'lucide-react';
 import { AccountHead } from '../types';
 import { formatINR } from '../data/inventoryData';
+import { DeleteConfirmModal } from './common/DeleteConfirmModal';
 
 interface AccountMasterViewProps {
   accounts: AccountHead[];
   onSaveAccount: (acc: AccountHead) => Promise<void>;
+  onDeleteAccount?: (acc: AccountHead) => Promise<void>;
 }
 
 export const AccountMasterView: React.FC<AccountMasterViewProps> = ({
   accounts,
-  onSaveAccount
+  onSaveAccount,
+  onDeleteAccount
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedGroup, setSelectedGroup] = useState<string>('ALL');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [accountToDelete, setAccountToDelete] = useState<AccountHead | null>(null);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -63,6 +69,19 @@ export const AccountMasterView: React.FC<AccountMasterViewProps> = ({
       });
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleConfirmDeleteAccount = async () => {
+    if (!accountToDelete || !onDeleteAccount) return;
+    try {
+      setIsDeletingAccount(true);
+      await onDeleteAccount(accountToDelete);
+      setAccountToDelete(null);
+    } catch (err) {
+      console.error('Failed to delete account head:', err);
+    } finally {
+      setIsDeletingAccount(false);
     }
   };
 
@@ -133,12 +152,13 @@ export const AccountMasterView: React.FC<AccountMasterViewProps> = ({
                 <th className="py-3.5 px-4">Account Group</th>
                 <th className="py-3.5 px-4 text-right">Running Balance (₹)</th>
                 <th className="py-3.5 px-4 text-center">Type</th>
+                <th className="py-3.5 px-4 text-center">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-12 text-center text-slate-400">
+                  <td colSpan={6} className="py-12 text-center text-slate-400">
                     <LayoutDashboard className="w-8 h-8 text-slate-300 mx-auto mb-2" />
                     <p className="font-semibold text-slate-700">No ledger heads matching filter</p>
                     <p className="text-xs text-slate-400 mt-0.5">Click &ldquo;+ Add Ledger Head&rdquo; to create chart of accounts entries.</p>
@@ -163,6 +183,16 @@ export const AccountMasterView: React.FC<AccountMasterViewProps> = ({
                       }`}>
                         {acc.balanceType}
                       </span>
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      <button
+                        type="button"
+                        onClick={() => setAccountToDelete(acc)}
+                        title="Delete GL Account Head"
+                        className="inline-flex items-center justify-center p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </td>
                   </tr>
                 ))
@@ -262,6 +292,19 @@ export const AccountMasterView: React.FC<AccountMasterViewProps> = ({
             </form>
           </div>
         </div>
+      )}
+
+      {/* Delete Confirmation Modal for Account Head */}
+      {accountToDelete && (
+        <DeleteConfirmModal
+          isOpen={!!accountToDelete}
+          title="Delete Account Head"
+          message={`Are you sure you want to permanently delete GL Account "${accountToDelete.name}" (${accountToDelete.code})? Any general ledger postings associated with this head will lose their master link.`}
+          itemDetails={`GL Code: ${accountToDelete.code} • ${accountToDelete.name} • Group: ${accountToDelete.group} • Balance: ${formatINR(accountToDelete.balance)} ${accountToDelete.balanceType}`}
+          isDeleting={isDeletingAccount}
+          onConfirm={handleConfirmDeleteAccount}
+          onCancel={() => setAccountToDelete(null)}
+        />
       )}
     </div>
   );

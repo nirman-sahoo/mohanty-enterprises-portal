@@ -6,23 +6,28 @@ import {
   Search,
   CheckCircle2,
   X,
+  Trash2
 } from 'lucide-react';
 import { ExpenseRecord } from '../types';
 import { formatINR } from '../data/inventoryData';
+import { DeleteConfirmModal } from './common/DeleteConfirmModal';
 
 interface ExpensesViewProps {
   expenses: ExpenseRecord[];
   onSaveExpense: (expense: ExpenseRecord) => Promise<void>;
+  onDeleteExpense?: (expense: ExpenseRecord) => Promise<void>;
 }
 
 export const ExpensesView: React.FC<ExpensesViewProps> = ({
   expenses,
   onSaveExpense,
+  onDeleteExpense,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [expenseToDelete, setExpenseToDelete] = useState<ExpenseRecord | null>(null);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -207,12 +212,13 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
                 <th className="py-3.5 px-4 text-right">Amount</th>
                 <th className="py-3.5 px-4">Payment Mode</th>
                 <th className="py-3.5 px-4 text-center">Status</th>
+                <th className="py-3.5 px-4 text-right">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filteredExpenses.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-400">
+                  <td colSpan={9} className="py-12 text-center text-slate-400">
                     <Receipt className="w-8 h-8 text-slate-300 mx-auto mb-2" />
                     <p className="font-semibold text-slate-700">No expense vouchers recorded yet</p>
                     <p className="text-xs text-slate-400 mt-0.5">Click &ldquo;+ Log Expense Voucher&rdquo; to record fuel, yard wages, or operational payouts.</p>
@@ -242,6 +248,18 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
                         <span>{exp.status}</span>
                       </span>
                     </td>
+                    <td className="py-3 px-4 text-right whitespace-nowrap">
+                      {onDeleteExpense && (
+                        <button
+                          onClick={() => setExpenseToDelete(exp)}
+                          className="px-2 py-1 text-xs font-semibold text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded transition-colors cursor-pointer inline-flex items-center gap-1 border border-transparent hover:border-rose-200"
+                          title="Delete Expense Voucher"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                          <span>Delete</span>
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 ))
               )}
@@ -249,6 +267,26 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
           </table>
         </div>
       </div>
+
+      {/* Delete Confirmation Popup */}
+      <DeleteConfirmModal
+        isOpen={!!expenseToDelete}
+        title="Delete Expense Voucher"
+        message={`Are you sure you want to permanently delete expense voucher ${expenseToDelete?.expenseNo} paid to ${expenseToDelete?.paidTo}?`}
+        itemDetails={expenseToDelete ? [
+          { label: 'Voucher No', value: expenseToDelete.expenseNo },
+          { label: 'Payee', value: expenseToDelete.paidTo },
+          { label: 'Category', value: expenseToDelete.category },
+          { label: 'Amount', value: formatINR(expenseToDelete.amount) }
+        ] : []}
+        confirmButtonText="Delete Expense"
+        onConfirm={async () => {
+          if (expenseToDelete && onDeleteExpense) {
+            await onDeleteExpense(expenseToDelete);
+          }
+        }}
+        onClose={() => setExpenseToDelete(null)}
+      />
 
       {/* Add Expense Voucher Modal */}
       {isAddModalOpen && (

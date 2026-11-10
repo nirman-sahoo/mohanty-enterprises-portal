@@ -4,22 +4,27 @@ import {
   Plus, 
   Search, 
   X,
+  Trash2
 } from 'lucide-react';
 import { JournalEntry } from '../types';
 import { formatINR } from '../data/inventoryData';
+import { DeleteConfirmModal } from './common/DeleteConfirmModal';
 
 interface JournalViewProps {
   entries: JournalEntry[];
   onSaveEntry: (entry: JournalEntry) => Promise<void>;
+  onDeleteEntry?: (entry: JournalEntry) => Promise<void>;
 }
 
 export const JournalView: React.FC<JournalViewProps> = ({
   entries,
-  onSaveEntry
+  onSaveEntry,
+  onDeleteEntry,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [entryToDelete, setEntryToDelete] = useState<JournalEntry | null>(null);
 
   // Form
   const [formData, setFormData] = useState({
@@ -125,12 +130,13 @@ export const JournalView: React.FC<JournalViewProps> = ({
                 <th className="py-3.5 px-4 text-right">Amount (₹)</th>
                 <th className="py-3.5 px-4">Narration</th>
                 <th className="py-3.5 px-4 text-center">Authorized</th>
+                <th className="py-3.5 px-4 text-right">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-slate-400">
+                  <td colSpan={8} className="py-12 text-center text-slate-400">
                     <BookOpen className="w-8 h-8 text-slate-300 mx-auto mb-2" />
                     <p className="font-semibold text-slate-700">No Journal Vouchers recorded yet</p>
                     <p className="text-xs text-slate-400 mt-0.5">Click &ldquo;+ Create Journal Voucher&rdquo; to post non-cash double-entry bookkeeping transactions.</p>
@@ -150,6 +156,18 @@ export const JournalView: React.FC<JournalViewProps> = ({
                         Approved
                       </span>
                     </td>
+                    <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                      {onDeleteEntry && (
+                        <button
+                          onClick={() => setEntryToDelete(j)}
+                          className="px-2 py-1 text-xs font-semibold text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded transition-colors cursor-pointer inline-flex items-center gap-1 border border-transparent hover:border-rose-200"
+                          title="Delete Journal Voucher"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                          <span>Delete</span>
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 ))
               )}
@@ -157,6 +175,26 @@ export const JournalView: React.FC<JournalViewProps> = ({
           </table>
         </div>
       </div>
+
+      {/* Delete Confirmation Popup */}
+      <DeleteConfirmModal
+        isOpen={!!entryToDelete}
+        title="Delete Journal Voucher"
+        message={`Are you sure you want to permanently delete journal voucher ${entryToDelete?.jvNo}?`}
+        itemDetails={entryToDelete ? [
+          { label: 'JV Number', value: entryToDelete.jvNo },
+          { label: 'Debit Account', value: entryToDelete.debitAccount },
+          { label: 'Credit Account', value: entryToDelete.creditAccount },
+          { label: 'Amount', value: formatINR(entryToDelete.debitAmount) }
+        ] : []}
+        confirmButtonText="Delete Voucher"
+        onConfirm={async () => {
+          if (entryToDelete && onDeleteEntry) {
+            await onDeleteEntry(entryToDelete);
+          }
+        }}
+        onClose={() => setEntryToDelete(null)}
+      />
 
       {/* Add JV Modal */}
       {isAddModalOpen && (

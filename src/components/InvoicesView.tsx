@@ -6,6 +6,7 @@ import {
   Filter, 
   Printer, 
   Eye, 
+  Trash2,
   Building2,
   Calendar,
   Layers,
@@ -13,21 +14,25 @@ import {
 } from 'lucide-react';
 import { SaleRecord, Category } from '../types';
 import { CATEGORIES, formatINR } from '../data/inventoryData';
+import { DeleteConfirmModal } from './common/DeleteConfirmModal';
 
 interface InvoicesViewProps {
   sales: SaleRecord[];
   onViewInvoice: (sale: SaleRecord) => void;
   onOpenRecordSale: () => void;
+  onDeleteSale?: (sale: SaleRecord) => Promise<void>;
 }
 
 export const InvoicesView: React.FC<InvoicesViewProps> = ({
   sales,
   onViewInvoice,
   onOpenRecordSale,
+  onDeleteSale,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [selectedPayment, setSelectedPayment] = useState<string>('ALL');
+  const [saleToDelete, setSaleToDelete] = useState<SaleRecord | null>(null);
 
   // Filter invoices
   const filteredSales = sales.filter((sale) => {
@@ -209,14 +214,26 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
                     <td className="py-3 px-3 text-slate-600 font-mono text-[11px]">
                       {sale.truckNumber || 'Assigned'}
                     </td>
-                    <td className="py-3 px-4 text-right">
-                      <button
-                        onClick={() => onViewInvoice(sale)}
-                        className="px-2.5 py-1 text-xs font-semibold text-slate-700 hover:text-slate-950 bg-slate-100 hover:bg-slate-200 rounded transition-colors cursor-pointer inline-flex items-center gap-1"
-                      >
-                        <Eye className="w-3 h-3" />
-                        <span>View</span>
-                      </button>
+                    <td className="py-3 px-4 text-right whitespace-nowrap">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => onViewInvoice(sale)}
+                          className="px-2.5 py-1 text-xs font-semibold text-slate-700 hover:text-slate-950 bg-slate-100 hover:bg-slate-200 rounded transition-colors cursor-pointer inline-flex items-center gap-1"
+                        >
+                          <Eye className="w-3 h-3" />
+                          <span>View</span>
+                        </button>
+                        {onDeleteSale && (
+                          <button
+                            onClick={() => setSaleToDelete(sale)}
+                            className="px-2 py-1 text-xs font-semibold text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded transition-colors cursor-pointer inline-flex items-center gap-1 border border-transparent hover:border-rose-200"
+                            title="Delete Invoice"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            <span>Delete</span>
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -225,6 +242,26 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
           </table>
         </div>
       </div>
+
+      {/* Delete Confirmation Popup */}
+      <DeleteConfirmModal
+        isOpen={!!saleToDelete}
+        title="Delete Commercial Invoice"
+        message={`Are you sure you want to permanently delete invoice ${saleToDelete?.invoiceNo} for ${saleToDelete?.customerName}? This will remove the sale record from sales analytics and adjust customer records.`}
+        itemDetails={saleToDelete ? [
+          { label: 'Invoice No', value: saleToDelete.invoiceNo },
+          { label: 'Customer', value: saleToDelete.customerName },
+          { label: 'Amount', value: formatINR(saleToDelete.totalAmount) },
+          { label: 'Date', value: saleToDelete.date }
+        ] : []}
+        confirmButtonText="Delete Invoice"
+        onConfirm={async () => {
+          if (saleToDelete && onDeleteSale) {
+            await onDeleteSale(saleToDelete);
+          }
+        }}
+        onClose={() => setSaleToDelete(null)}
+      />
     </div>
   );
 };
