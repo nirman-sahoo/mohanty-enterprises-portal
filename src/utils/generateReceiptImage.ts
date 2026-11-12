@@ -1,21 +1,25 @@
-import { SaleRecord } from '../types';
+import { CompanySettings, SaleRecord } from '../types';
 import { formatINR } from './formatters';
 
 /**
- * Renders the exact authentic thermal receipt slip onto an HTML5 Canvas at 2x high-DPI,
- * downloads it as a PNG image, and writes the image directly to the clipboard.
+ * Renders the thermal receipt slip onto an HTML5 Canvas at 2x high-DPI,
+ * downloads it as a PNG image, and copies the image to the clipboard.
  */
-export async function generateAndCopyReceiptImage(sale: SaleRecord): Promise<{
+export async function generateAndCopyReceiptImage(
+  sale: SaleRecord,
+  settings?: CompanySettings
+): Promise<{
   success: boolean;
   copiedToClipboard: boolean;
   error?: string;
 }> {
   try {
-    const isGst = sale.isGst ?? true;
-    const subtotal = sale.subtotal || sale.totalAmount;
-    const gstRate = 0.18;
-    const gstAmount = isGst ? Math.round(subtotal * gstRate) : 0;
-    const grandTotal = isGst ? subtotal + gstAmount : subtotal;
+    const companyName = settings?.companyName || 'MOHANTY ENTERPRISES';
+    const companyAddress = settings?.address || '';
+    const companyPhone = settings?.phone || '';
+
+    const subtotal = sale.totalAmount || sale.subtotal || 0;
+    const grandTotal = subtotal;
 
     const lineItems = sale.items && sale.items.length > 0
       ? sale.items
@@ -31,14 +35,12 @@ export async function generateAndCopyReceiptImage(sale: SaleRecord): Promise<{
           },
         ];
 
-    // High DPI scaling factor
     const scale = 2;
     const width = 440;
-    // Calculate required height dynamically based on items
-    const headerHeight = 170;
+    const headerHeight = 140 + (companyAddress ? 18 : 0) + (companyPhone ? 16 : 0);
     const metaHeight = 110;
     const itemHeight = lineItems.length * 40 + 35;
-    const totalsHeight = isGst ? 140 : 100;
+    const totalsHeight = 95;
     const footerHeight = 90;
     const height = headerHeight + metaHeight + itemHeight + totalsHeight + footerHeight;
 
@@ -50,50 +52,43 @@ export async function generateAndCopyReceiptImage(sale: SaleRecord): Promise<{
 
     ctx.scale(scale, scale);
 
-    // Background - crisp receipt thermal paper look
     ctx.fillStyle = '#FFFFFF';
     ctx.fillRect(0, 0, width, height);
 
-    // Subtle receipt border
     ctx.strokeStyle = '#CBD5E1';
     ctx.lineWidth = 1;
     ctx.strokeRect(10, 10, width - 20, height - 20);
 
     let y = 38;
 
-    // Company Header
     ctx.fillStyle = '#0F172A';
     ctx.font = 'bold 18px "Courier New", Courier, monospace';
     ctx.textAlign = 'center';
-    ctx.fillText('MOHANTY ENTERPRISES', width / 2, y);
+    ctx.fillText(companyName, width / 2, y);
 
-    y += 18;
     ctx.font = '11px "Courier New", Courier, monospace';
     ctx.fillStyle = '#475569';
-    ctx.fillText('Plot 128, Industrial Estate, Rasulgarh', width / 2, y);
 
-    y += 16;
-    ctx.fillText('Bhubaneswar · Phone: +91 9861044211', width / 2, y);
+    if (companyAddress) {
+      y += 18;
+      ctx.fillText(companyAddress.slice(0, 46), width / 2, y);
+    }
 
-    if (isGst) {
+    if (companyPhone) {
       y += 16;
-      ctx.font = 'bold 11px "Courier New", Courier, monospace';
-      ctx.fillStyle = '#1E293B';
-      ctx.fillText('GSTIN: 21AAAFM9201E1Z8', width / 2, y);
+      ctx.fillText(`Phone: ${companyPhone}`, width / 2, y);
     }
 
     y += 24;
-    // Receipt Type Badge
     ctx.fillStyle = '#F1F5F9';
     ctx.fillRect(width / 2 - 110, y - 13, 220, 20);
     ctx.strokeStyle = '#94A3B8';
     ctx.strokeRect(width / 2 - 110, y - 13, 220, 20);
     ctx.fillStyle = '#0F172A';
     ctx.font = 'bold 11px "Courier New", Courier, monospace';
-    ctx.fillText(isGst ? 'COMMERCIAL TAX INVOICE' : 'ESTIMATE / CASH MEMO', width / 2, y + 1);
+    ctx.fillText('ESTIMATE / CASH MEMO', width / 2, y + 1);
 
     y += 22;
-    // Dashed divider line
     const drawDashedLine = (currY: number) => {
       ctx.save();
       ctx.strokeStyle = '#94A3B8';
@@ -109,7 +104,6 @@ export async function generateAndCopyReceiptImage(sale: SaleRecord): Promise<{
     drawDashedLine(y);
     y += 18;
 
-    // Meta details (Left and Right aligned)
     ctx.textAlign = 'left';
     ctx.font = '11px "Courier New", Courier, monospace';
     ctx.fillStyle = '#334155';
@@ -137,7 +131,6 @@ export async function generateAndCopyReceiptImage(sale: SaleRecord): Promise<{
     drawDashedLine(y);
     y += 18;
 
-    // Items table header
     ctx.textAlign = 'left';
     ctx.font = 'bold 11px "Courier New", Courier, monospace';
     ctx.fillStyle = '#0F172A';
@@ -150,7 +143,6 @@ export async function generateAndCopyReceiptImage(sale: SaleRecord): Promise<{
     drawDashedLine(y);
     y += 16;
 
-    // Items rows
     lineItems.forEach((item) => {
       ctx.textAlign = 'left';
       ctx.font = 'bold 11px "Courier New", Courier, monospace';
@@ -173,33 +165,17 @@ export async function generateAndCopyReceiptImage(sale: SaleRecord): Promise<{
     drawDashedLine(y);
     y += 18;
 
-    // Calculations
     ctx.textAlign = 'left';
     ctx.font = '11px "Courier New", Courier, monospace';
     ctx.fillStyle = '#475569';
-    ctx.fillText('Subtotal:', 24, y);
+    ctx.fillText('Items Total:', 24, y);
     ctx.textAlign = 'right';
     ctx.fillText(`₹${subtotal.toLocaleString('en-IN')}`, width - 24, y);
-
-    if (isGst) {
-      y += 16;
-      ctx.textAlign = 'left';
-      ctx.fillText('CGST (9%):', 24, y);
-      ctx.textAlign = 'right';
-      ctx.fillText(`₹${Math.round(gstAmount / 2).toLocaleString('en-IN')}`, width - 24, y);
-
-      y += 16;
-      ctx.textAlign = 'left';
-      ctx.fillText('SGST (9%):', 24, y);
-      ctx.textAlign = 'right';
-      ctx.fillText(`₹${Math.round(gstAmount / 2).toLocaleString('en-IN')}`, width - 24, y);
-    }
 
     y += 12;
     drawDashedLine(y);
     y += 20;
 
-    // Grand total
     ctx.textAlign = 'left';
     ctx.font = 'bold 14px "Courier New", Courier, monospace';
     ctx.fillStyle = '#0F172A';
@@ -218,7 +194,6 @@ export async function generateAndCopyReceiptImage(sale: SaleRecord): Promise<{
     drawDashedLine(y);
     y += 20;
 
-    // Footer
     ctx.textAlign = 'center';
     ctx.font = 'bold 11px "Courier New", Courier, monospace';
     ctx.fillStyle = '#334155';
@@ -231,26 +206,23 @@ export async function generateAndCopyReceiptImage(sale: SaleRecord): Promise<{
 
     y += 14;
     ctx.fillStyle = '#94A3B8';
-    ctx.fillText('Mohanty Enterprises · B2B Trading Terminal', width / 2, y);
+    ctx.fillText(companyName, width / 2, y);
 
-    // Convert to Blob
     const blob = await new Promise<Blob | null>((resolve) =>
       canvas.toBlob((b) => resolve(b), 'image/png')
     );
 
     if (!blob) throw new Error('Canvas blob generation failed');
 
-    // 1. Download file
     const downloadUrl = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = downloadUrl;
-    link.download = `Mohanty_Enterprises_${sale.invoiceNo.replace(/\//g, '-')}.png`;
+    link.download = `${companyName.replace(/\s+/g, '_')}_${sale.invoiceNo.replace(/\//g, '-')}.png`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(downloadUrl);
 
-    // 2. Copy image directly to clipboard
     let copiedToClipboard = false;
     if (navigator.clipboard && typeof ClipboardItem !== 'undefined') {
       try {

@@ -1,45 +1,46 @@
-# Mohanty Enterprises - B2B Trading Terminal
+# Mohanty Enterprises - B2B Accounting & Trading Portal
 
-Wholesale B2B trading terminal for Cement, TMT Bars, Fertilizers, and Asbestos sheets. Built with React 19, TypeScript, Vite, and Tailwind CSS.
+Non-GST commercial billing, double-entry Cash/Bank books, inventory valuation, and party ledger management built with React 19, TypeScript, Vite, Tailwind CSS v4, and Firebase Firestore.
 
 ---
 
-## 🚀 Deploying to Vercel from GitHub
+## Deploying to Vercel from GitHub
 
-This repository is pre-configured for **zero-config, production-ready deployment on Vercel**.
+This project is pre-configured for zero-config production deployment on Vercel via `vercel.json` and `.npmrc`.
 
-### Step-by-Step Instructions:
+### 1. Push to GitHub
+Commit and push the workspace files to your GitHub repository:
+```bash
+git init
+git add .
+git commit -m "Production ready release"
+git branch -M main
+git remote add origin <your-github-repo-url>
+git push -u origin main
+```
 
-1. **Push to GitHub**:
-   Ensure all files (including `vercel.json`, `package.json`, and `vite.config.ts`) are committed and pushed to your GitHub repository:
-   ```bash
-   git add .
-   git commit -m "Configure production deployment for Vercel"
-   git push origin main
-   ```
-
-2. **Import to Vercel**:
-   - Go to [vercel.com](https://vercel.com) and log in.
-   - Click **"Add New..."** > **"Project"**.
-   - Select your GitHub repository (`mohanty-enterprises-terminal`).
-
-3. **Verify Project Settings (Pre-Configured)**:
-   Vercel will automatically detect the settings from `vercel.json`:
+### 2. Import into Vercel
+1. Open [vercel.com](https://vercel.com), click **Add New... → Project**, and select your repository.
+2. Confirm the detected build settings (loaded from `vercel.json`):
    - **Framework Preset**: `Vite`
+   - **Install Command**: `npm install --legacy-peer-deps`
    - **Build Command**: `npm run build`
    - **Output Directory**: `dist`
-   - **Install Command**: `npm install --legacy-peer-deps`
-
-4. **Deploy**:
-   - Click **"Deploy"**.
-   - Vercel will build the project in ~30 seconds and provide a live production URL (`https://your-project.vercel.app`).
+3. *(Optional)* Add Firebase environment variables under **Project Settings → Environment Variables** if targeting a separate Firebase project (`VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_APP_ID`, `VITE_FIREBASE_FIRESTORE_DATABASE_ID`). Otherwise, `src/firebase/config.ts` loads the bundled configuration automatically.
+4. Click **Deploy**.
 
 ---
 
-## 🛠 Features Configured for Production Stability
+## Initial Production Setup (First Run)
 
-- **SPA Fallback Routing (`vercel.json`)**: Configured with wildcard rewrites (`/(.*) -> /index.html`) so refreshing on any route will not return 404 errors.
-- **Dependency Resolution (`.npmrc` & `vercel.json`)**: Configured with `legacy-peer-deps=true` and `installCommand: "npm install --legacy-peer-deps"` to prevent npm `ERESOLVE` peer dependency conflicts with Vite / esbuild.
-- **Cross-Platform ESM Configuration (`vite.config.ts`)**: Configured using standard ESM directory resolution, preventing bundler issues in Linux CI/CD environments.
-- **Strict TypeScript Validation (`tsc --noEmit`)**: Passes full type checking with no errors.
-- **Tailwind CSS v4 Integration**: Pre-compiled and bundled for production.
+The database starts clean with **zero sample data**. After signing in:
+1. Open **Configuration → Settings** to set your Company Trade Name, Registered Address, Phone, Voucher Prefixes, and Corporate Bank Accounts with opening balances.
+2. Add your initial warehouse material SKUs under **Reports → Stock Report** (or post a **Purchase Voucher** to register new SKUs automatically).
+3. Use **Settings → Clear Database & Start Fresh** at any time to reset all vouchers and restore clean production defaults.
+
+---
+
+## Key Production Features
+- **Double-Entry Books**: Sales Vouchers, Purchase Vouchers, Cash Book, Bank Book, Contra Entries, Party Outstandings, and Supplier Payables stay synchronized in real time via Firestore.
+- **SPA Routing & Immutable Asset Caching (`vercel.json`)**: Wildcard rewrites serve `index.html` cleanly across refreshes while caching `/assets/*` bundles.
+- **Strict TypeScript Validation**: Passes `tsc --noEmit` and `vite build` cleanly.

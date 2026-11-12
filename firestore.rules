@@ -20,10 +20,6 @@ service cloud.firestore {
       return request.resource.data;
     }
 
-    function existing() {
-      return resource.data;
-    }
-
     function isValidInventory(data) {
       return data.name is string && data.name.size() > 0 && data.name.size() <= 120 &&
              data.category is string &&
@@ -55,34 +51,12 @@ service cloud.firestore {
              data.paymentMode is string;
     }
 
-    function isValidEmployee(data) {
-      return data.name is string && data.name.size() <= 160 &&
-             data.department is string &&
-             data.monthlySalary is number;
-    }
-
-    function isValidAttendance(data) {
-      return data.employeeName is string &&
-             data.date is string &&
-             data.status is string;
-    }
-
-    function isValidPayroll(data) {
-      return data.employeeName is string &&
-             data.month is string &&
-             data.netSalary is number;
-    }
-
-    function isValidLeave(data) {
-      return data.employeeName is string &&
-             data.leaveType is string &&
-             data.status is string;
-    }
-
-    function isValidExpense(data) {
-      return data.expenseNo is string && data.expenseNo.size() <= 64 &&
+    function isValidPaymentVoucher(data) {
+      return data.voucherNo is string && data.voucherNo.size() <= 64 &&
+             data.supplierName is string && data.supplierName.size() <= 160 &&
              data.amount is number &&
-             data.category is string;
+             data.paymentMode is string &&
+             data.bankAccountId is string;
     }
 
     function isValidPurchase(data) {
@@ -104,16 +78,9 @@ service cloud.firestore {
              data.toAccount is string;
     }
 
-    function isValidAccountHead(data) {
-      return data.code is string && data.code.size() <= 64 &&
-             data.name is string &&
-             data.group is string;
-    }
-
-    function isValidJournalEntry(data) {
-      return data.jvNo is string && data.jvNo.size() <= 64 &&
-             data.debitAmount is number &&
-             data.creditAmount is number;
+    function isValidSettings(data) {
+      return data.companyName is string && data.companyName.size() > 0 && data.companyName.size() <= 160 &&
+             data.gstin is string && data.gstin.size() <= 40;
     }
 
     // Master Inventory Catalog & Stock
@@ -124,7 +91,7 @@ service cloud.firestore {
       allow delete: if isValidId(itemId);
     }
 
-    // Commercial Orders & Invoices
+    // Sales Vouchers & Commercial Invoices
     match /orders/{orderId} {
       allow read: if true;
       allow create: if isValidId(orderId) && isValidOrder(incoming());
@@ -132,7 +99,7 @@ service cloud.firestore {
       allow delete: if isValidId(orderId);
     }
 
-    // Khatabook Party Directory & Balances
+    // Party Outstandings & Receivables Ledger
     match /ledgers/{ledgerId} {
       allow read: if true;
       allow create: if isValidId(ledgerId) && isValidLedger(incoming());
@@ -140,7 +107,7 @@ service cloud.firestore {
       allow delete: if isValidId(ledgerId);
     }
 
-    // Official Payment Receipt Vouchers
+    // Official Customer Receipt Vouchers
     match /money_receipts/{receiptId} {
       allow read: if true;
       allow create: if isValidId(receiptId) && isValidReceipt(incoming());
@@ -148,47 +115,15 @@ service cloud.firestore {
       allow delete: if isValidId(receiptId);
     }
 
-    // Employee Master Records
-    match /employees/{empId} {
+    // Supplier Payment Vouchers
+    match /payment_vouchers/{voucherId} {
       allow read: if true;
-      allow create: if isValidId(empId) && isValidEmployee(incoming());
-      allow update: if isValidId(empId) && isValidEmployee(incoming());
-      allow delete: if isValidId(empId);
+      allow create: if isValidId(voucherId) && isValidPaymentVoucher(incoming());
+      allow update: if isValidId(voucherId) && isValidPaymentVoucher(incoming());
+      allow delete: if isValidId(voucherId);
     }
 
-    // Daily Attendance Logs
-    match /attendance_logs/{logId} {
-      allow read: if true;
-      allow create: if isValidId(logId) && isValidAttendance(incoming());
-      allow update: if isValidId(logId) && isValidAttendance(incoming());
-      allow delete: if isValidId(logId);
-    }
-
-    // Monthly Payroll Records
-    match /payroll_records/{recordId} {
-      allow read: if true;
-      allow create: if isValidId(recordId) && isValidPayroll(incoming());
-      allow update: if isValidId(recordId) && isValidPayroll(incoming());
-      allow delete: if isValidId(recordId);
-    }
-
-    // Staff Leave Requests
-    match /leave_requests/{requestId} {
-      allow read: if true;
-      allow create: if isValidId(requestId) && isValidLeave(incoming());
-      allow update: if isValidId(requestId) && isValidLeave(incoming());
-      allow delete: if isValidId(requestId);
-    }
-
-    // Operational Expenses
-    match /expenses/{expenseId} {
-      allow read: if true;
-      allow create: if isValidId(expenseId) && isValidExpense(incoming());
-      allow update: if isValidId(expenseId) && isValidExpense(incoming());
-      allow delete: if isValidId(expenseId);
-    }
-
-    // Supplier Purchases & Procurement
+    // Purchase Vouchers & Procurement
     match /purchases/{purchaseId} {
       allow read: if true;
       allow create: if isValidId(purchaseId) && isValidPurchase(incoming());
@@ -196,7 +131,7 @@ service cloud.firestore {
       allow delete: if isValidId(purchaseId);
     }
 
-    // Company Bank & Cash Accounts
+    // Company Bank & Cash Drawer Accounts
     match /bank_accounts/{accId} {
       allow read: if true;
       allow create: if isValidId(accId) && isValidBankAccount(incoming());
@@ -212,20 +147,12 @@ service cloud.firestore {
       allow delete: if isValidId(contraId);
     }
 
-    // General Ledger Account Heads
-    match /account_heads/{headId} {
+    // Enterprise & Terminal Configuration
+    match /settings/{settingId} {
       allow read: if true;
-      allow create: if isValidId(headId) && isValidAccountHead(incoming());
-      allow update: if isValidId(headId) && isValidAccountHead(incoming());
-      allow delete: if isValidId(headId);
-    }
-
-    // Double-Entry Journal Vouchers
-    match /journal_vouchers/{jvId} {
-      allow read: if true;
-      allow create: if isValidId(jvId) && isValidJournalEntry(incoming());
-      allow update: if isValidId(jvId) && isValidJournalEntry(incoming());
-      allow delete: if isValidId(jvId);
+      allow create: if isValidId(settingId) && isValidSettings(incoming());
+      allow update: if isValidId(settingId) && isValidSettings(incoming());
+      allow delete: if isValidId(settingId);
     }
   }
 }

@@ -1,33 +1,36 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { 
   X, 
   Send, 
   Printer, 
-  Download, 
   Plus, 
-  Calendar, 
-  Filter,
-  Building2,
-  Phone
 } from 'lucide-react';
-import { CustomerLedger, StatementEntry, VoucherType } from '../types';
+import { CompanySettings, CustomerLedger, StatementEntry, VoucherType } from '../types';
 import { formatINR } from '../utils/formatters';
+import { recomputeStatementBalances } from '../utils/accountingEngine';
 
 interface PartyStatementModalProps {
   ledger: CustomerLedger | null;
   onClose: () => void;
   onAddTransaction?: (ledgerId: string, entry: Omit<StatementEntry, 'id'>) => void;
+  settings?: CompanySettings;
 }
 
 export const PartyStatementModal: React.FC<PartyStatementModalProps> = ({
   ledger,
   onClose,
   onAddTransaction,
+  settings,
 }) => {
-  if (!ledger) return null;
+  const todayStr = new Date().toISOString().split('T')[0];
+  const monthStartStr = `${todayStr.slice(0, 8)}01`;
 
-  const [startDate, setStartDate] = useState('2026-09-01');
-  const [endDate, setEndDate] = useState('2026-10-31');
+  const entries = ledger?.statementEntries || [];
+  const earliestEntryDate = entries.reduce((min, e) => (!min || (e.date && e.date < min) ? e.date : min), '');
+  const latestEntryDate = entries.reduce((max, e) => (!max || (e.date && e.date > max) ? e.date : max), '');
+
+  const [startDate, setStartDate] = useState(earliestEntryDate || monthStartStr);
+  const [endDate, setEndDate] = useState(latestEntryDate > todayStr ? latestEntryDate : todayStr);
   const [voucherFilter, setVoucherFilter] = useState<string>('ALL');
   const [isAddTxOpen, setIsAddTxOpen] = useState(false);
 
@@ -36,34 +39,61 @@ export const PartyStatementModal: React.FC<PartyStatementModalProps> = ({
   const [txDetails, setTxDetails] = useState('');
   const [txItemQty, setTxItemQty] = useState('');
   const [txAmount, setTxAmount] = useState<number>(0);
-  const [txDate, setTxDate] = useState(new Date().toISOString().split('T')[0]);
+  const [txDate, setTxDate] = useState(todayStr);
 
-  // Compute metrics from statementEntries
-  const entries = ledger.statementEntries || [];
-  const filteredEntries = entries.filter((e) => {
-    const inRange = e.date >= startDate && e.date <= endDate;
-    const matchesVoucher = voucherFilter === 'ALL' || e.voucherType === voucherFilter;
-    return inRange && matchesVoucher;
-  });
+  useEffect(() => {
+    if (!ledger) return;
+    const list = ledger.statementEntries || [];
+    const firstDate = list.reduce((min, e) => (!min || (e.date && e.date < min) ? e.date : min), '');
+    const lastDate = list.reduce((max, e) => (!max || (e.date && e.date > max) ? e.date : max), '');
+    setStartDate(firstDate || monthStartStr);
+    setEndDate(lastDate > todayStr ? lastDate : todayStr);
+    setVoucherFilter('ALL');
+  }, [ledger?.id]);
 
-  const totalDebit = filteredEntries.reduce((acc, e) => acc + (e.debit || 0), 0);
-  const totalCredit = filteredEntries.reduce((acc, e) => acc + (e.credit || 0), 0);
-  const openingBalance = ledger.openingBalance || 0;
-  const netBalance = openingBalance + totalDebit - totalCredit;
+  // Recompute chronological balances starting from ledger.openingBalance + any transactions prior to startDate
+  const { openingBalance, totalDebit, totalCredit, netBalance, filteredEntries } = useMemo(() => {
+    const baseOpening = ledger?.openingBalance || 0;
+    const chronological = recomputeStatementBalances(baseOpening, entries);
+    const priorNet = entries
+      .filter((e) => (e.date || '') < startDate)
+      .reduce((acc, e) => acc + (Number(e.debit) || 0) - (Number(e.credit) || 0), 0);
+
+    const periodOpening = baseOpening + priorNet;
+
+    const matching = chronological.filter((e) => {
+      const inRange = (!startDate || e.date >= startDate) && (!endDate || e.date <= endDate);
+      const matchesVoucher = voucherFilter === 'ALL' || e.voucherType === voucherFilter;
+      return inRange && matchesVoucher;
+    });
+
+    const periodDebits = matching.reduce((acc, e) => acc + (Number(e.debit) || 0), 0);
+    const periodCredits = matching.reduce((acc, e) => acc + (Number(e.credit) || 0), 0);
+    const closing = periodOpening + periodDebits - periodCredits;
+
+    return {
+      openingBalance: periodOpening,
+      totalDebit: periodDebits,
+      totalCredit: periodCredits,
+      netBalance: closing,
+      filteredEntries: matching,
+    };
+  }, [entries, ledger?.openingBalance, startDate, endDate, voucherFilter]);
+
+  if (!ledger) return null;
 
   const handleWhatsAppShare = () => {
+    const companyName = settings?.companyName || 'MOHANTY ENTERPRISES';
+    const balanceLabel = netBalance >= 0 ? `${formatINR(netBalance)} Dr` : `${formatINR(Math.abs(netBalance))} Cr`;
     const summary = 
-`*MOHANTY ENTERPRISES · KHATABOOK STATEMENT*
+`*${companyName} · PARTY STATEMENT*
 Party: ${ledger.name}
-Phone: ${ledger.phone}
-Period: ${startDate} to ${endDate}
+${ledger.phone ? `Phone: ${ledger.phone}\n` : ''}Period: ${startDate} to ${endDate}
 
 *Opening Balance:* ${formatINR(openingBalance)}
 *Total Debit (Material Billed):* ${formatINR(totalDebit)}
 *Total Credit (Payments Received):* ${formatINR(totalCredit)}
-*Net Closing Balance:* ${formatINR(netBalance)} Dr
-
-For ledger inquiries, call Accounts at +91 674 258 9120.`;
+*Net Closing Balance:* ${balanceLabel}${settings?.phone ? `\n\nFor ledger inquiries, contact ${settings.phone}.` : ''}`;
 
     const cleanPhone = (ledger.phone || '').replace(/[^0-9]/g, '');
     const phoneParam = cleanPhone.length >= 10 ? (cleanPhone.startsWith('91') ? cleanPhone : `91${cleanPhone}`) : '';
@@ -77,11 +107,14 @@ For ledger inquiries, call Accounts at +91 674 258 9120.`;
     e.preventDefault();
     if (!txDetails || txAmount <= 0) return;
 
-    const isDebit = txType === 'Sales' || txType === 'Pur';
+    // Customer Ledger convention: Sales = Debit (increases receivable); Payment / Discount / Pur Return = Credit (reduces receivable)
+    const isDebit = txType === 'Sales';
     const debit = isDebit ? txAmount : 0;
     const credit = !isDebit ? txAmount : 0;
-    const lastBalance = entries.length > 0 ? entries[entries.length - 1].balance : 0;
-    const newBal = isDebit ? lastBalance + txAmount : lastBalance - txAmount;
+    const currentNet =
+      (ledger.openingBalance || 0) +
+      entries.reduce((acc, row) => acc + (Number(row.debit) || 0) - (Number(row.credit) || 0), 0);
+    const newBal = currentNet + debit - credit;
 
     const newEntry: Omit<StatementEntry, 'id'> = {
       date: txDate,
@@ -150,17 +183,19 @@ For ledger inquiries, call Accounts at +91 674 258 9120.`;
           {/* Header Banner (Matches PDF Page 4 layout) */}
           <div className="bg-slate-900 text-white p-4 rounded-lg flex items-center justify-between border-b-2 border-amber-500">
             <div>
-              <p className="text-xs font-semibold tracking-wider text-amber-400 uppercase">MOHANTY ENTERPRISES</p>
-              <h2 className="text-base font-bold tracking-tight text-white">{ledger.name} · Party Statement</h2>
-              <p className="text-xs text-slate-400 font-mono flex items-center gap-2 mt-0.5">
-                <span>Phone: {ledger.phone}</span>
-                <span>·</span>
-                <span>GSTIN: {ledger.gstin}</span>
+              <p className="text-xs font-semibold tracking-wider text-amber-400 uppercase">
+                {settings?.companyName || 'MOHANTY ENTERPRISES'}
               </p>
+              <h2 className="text-base font-bold tracking-tight text-white">{ledger.name} · Party Statement</h2>
+              {ledger.phone && (
+                <p className="text-xs text-slate-400 font-mono flex items-center gap-2 mt-0.5">
+                  <span>Phone: {ledger.phone}</span>
+                </p>
+              )}
             </div>
             <div className="text-right">
-              <span className="inline-block px-2.5 py-1 bg-rose-600/30 text-rose-300 font-mono text-xs font-bold rounded border border-rose-500/30">
-                Khatabook
+              <span className="text-xs font-semibold uppercase tracking-wider text-amber-400">
+                Party Statement
               </span>
               <p className="text-[11px] text-slate-400 mt-1 font-mono">
                 Period: {startDate} to {endDate}
@@ -208,7 +243,7 @@ For ledger inquiries, call Accounts at +91 674 258 9120.`;
             <div className="p-3 bg-white rounded-lg border border-slate-200 shadow-sm">
               <p className="text-[11px] font-bold text-slate-500 uppercase">Opening Balance</p>
               <p className="text-sm font-bold font-mono text-slate-800 mt-1 tabular-nums">{formatINR(openingBalance)}</p>
-              <p className="text-[10px] text-slate-400 font-mono">On 31 Aug 2026</p>
+              <p className="text-[10px] text-slate-400 font-mono">Before {startDate}</p>
             </div>
 
             <div className="p-3 bg-white rounded-lg border border-slate-200 shadow-sm">
@@ -224,11 +259,13 @@ For ledger inquiries, call Accounts at +91 674 258 9120.`;
             </div>
 
             <div className="p-3 bg-rose-50 rounded-lg border border-rose-200 shadow-sm">
-              <p className="text-[11px] font-bold text-rose-700 uppercase">Net Balance (Due)</p>
+              <p className="text-[11px] font-bold text-rose-700 uppercase">Net Balance ({netBalance >= 0 ? 'Due' : 'Advance'})</p>
               <p className="text-base font-extrabold font-mono text-rose-700 mt-0.5 tabular-nums">
-                {formatINR(netBalance)} Dr
+                {formatINR(Math.abs(netBalance))} {netBalance >= 0 ? 'Dr' : 'Cr'}
               </p>
-              <p className="text-[10px] text-rose-600 font-semibold">Payable to Mohanty Ent.</p>
+              <p className="text-[10px] text-rose-600 font-semibold">
+                {netBalance >= 0 ? 'Receivable Balance' : 'Credit / Advance Balance'}
+              </p>
             </div>
           </div>
 
@@ -255,17 +292,16 @@ For ledger inquiries, call Accounts at +91 674 258 9120.`;
                   </tr>
                 ) : (
                   filteredEntries.map((entry) => {
-                    // Badge color for specific voucher type
-                    const getVoucherBadge = (type: VoucherType) => {
+                    const getVoucherColor = (type: VoucherType) => {
                       switch (type) {
                         case 'Sales':
-                          return 'bg-blue-50 text-blue-700 border-blue-200';
+                          return 'text-blue-700';
                         case 'Pur':
-                          return 'bg-purple-50 text-purple-700 border-purple-200';
+                          return 'text-purple-700';
                         case 'Payment':
-                          return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+                          return 'text-emerald-700';
                         case 'Discount':
-                          return 'bg-amber-50 text-amber-700 border-amber-200';
+                          return 'text-amber-700';
                       }
                     };
 
@@ -275,7 +311,7 @@ For ledger inquiries, call Accounts at +91 674 258 9120.`;
                           {entry.date}
                         </td>
                         <td className="py-2.5 px-3 whitespace-nowrap">
-                          <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold border ${getVoucherBadge(entry.voucherType)}`}>
+                          <span className={`text-[11px] font-semibold ${getVoucherColor(entry.voucherType)}`}>
                             {entry.voucherType}
                           </span>
                         </td>
@@ -330,7 +366,7 @@ For ledger inquiries, call Accounts at +91 674 258 9120.`;
                       className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/50"
                     >
                       <option value="Sales">Sales (Material Out / Debit)</option>
-                      <option value="Pur">Purchase / Pur</option>
+                      <option value="Pur">Purchase Offset / Return (Credit)</option>
                       <option value="Payment">Payment (Receipt / Credit)</option>
                       <option value="Discount">Discount / Credit Note</option>
                     </select>
@@ -358,7 +394,7 @@ For ledger inquiries, call Accounts at +91 674 258 9120.`;
                     required
                     value={txDetails}
                     onChange={(e) => setTxDetails(e.target.value)}
-                    placeholder="e.g. CEMENT Grade 53 Supply or Cheque clearing"
+                    placeholder="Enter transaction particulars"
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/50"
                   />
                 </div>
@@ -371,7 +407,7 @@ For ledger inquiries, call Accounts at +91 674 258 9120.`;
                     type="text"
                     value={txItemQty}
                     onChange={(e) => setTxItemQty(e.target.value)}
-                    placeholder="e.g. CEMENT 300 Bags, TMT 12mm 5 Tons"
+                    placeholder="Item description and quantity"
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/50"
                   />
                 </div>

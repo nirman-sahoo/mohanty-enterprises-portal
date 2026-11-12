@@ -1,4 +1,4 @@
-import { SaleRecord, MoneyReceipt, CustomerLedger } from '../types';
+import { SaleRecord, MoneyReceipt, CustomerLedger, CompanySettings } from '../types';
 
 /**
  * Converts a number into Indian Currency Words (Lakhs, Crores, Thousands)
@@ -73,58 +73,49 @@ function createWhatsAppUrl(phone: string, text: string): string {
   return phoneParam ? `https://wa.me/${phoneParam}?text=${encodedText}` : `https://wa.me/?text=${encodedText}`;
 }
 
-/**
- * WhatsApp Order Verification message (Page 1)
- */
-export function generateOrderWhatsAppUrl(order: SaleRecord): string {
+export function generateOrderWhatsAppUrl(order: SaleRecord, settings?: CompanySettings): string {
+  const company = settings?.companyName || 'MOHANTY ENTERPRISES';
   const itemsText = order.items && order.items.length > 0
     ? order.items.map((it, idx) => `${idx + 1}. ${it.itemDescription} - ${it.quantity} ${it.unit} @ ₹${it.unitPrice.toLocaleString('en-IN')}`).join('\n')
     : `1. ${order.itemDescription} - ${order.quantity} ${order.unit} @ ₹${order.unitPrice.toLocaleString('en-IN')}`;
 
   const message = 
-`*MOHANTY ENTERPRISES - B2B TRADING TERMINAL*
-Wholesale Order Verification & Confirmation
+`*${company}*
+Order Verification & Confirmation
 
 *Order No:* ${order.orderNo || order.invoiceNo}
 *Date:* ${order.date} ${order.time || ''}
 *Party Name:* ${order.customerName}
-*Ship To (Site):* ${order.shipToAddress || 'Direct Yard Delivery'}
-*Vehicle No:* ${order.truckNumber || 'Pending Allocation'}
+*Ship To:* ${order.shipToAddress || '—'}
+*Vehicle No:* ${order.truckNumber || '—'}
 
 *Material Items:*
 ${itemsText}
 
-*Taxable Subtotal:* ${formatINR(order.subtotal || order.totalAmount)}
-${order.isGst ? `*GST (18% CGST+SGST):* ${formatINR(order.gstAmount || 0)}\n*Grand Total:* ${formatINR(order.totalAmount)}` : `*Net Bill Amount (Non-GST / Estimate):* ${formatINR(order.totalAmount)}`}
+*Net Bill Amount:* ${formatINR(order.totalAmount)}
 *Payment Terms:* ${order.paymentStatus}
-*Order Status:* ${order.status}
-
-_Kindly reply to confirm or modify this order dispatch._
-Mohanty Enterprises · Rasulgarh, Bhubaneswar`;
+*Order Status:* ${order.status}${settings?.address ? `\n\n${settings.address}` : ''}`;
 
   return createWhatsAppUrl(order.customerPhone, message);
 }
 
-/**
- * WhatsApp Bill Text Format (Page 2)
- */
-export function generateBillWhatsAppUrl(order: SaleRecord): string {
+export function generateBillWhatsAppUrl(order: SaleRecord, settings?: CompanySettings): string {
+  const company = settings?.companyName || 'MOHANTY ENTERPRISES';
   const itemsText = order.items && order.items.length > 0
-    ? order.items.map((it, idx) => `• ${it.itemDescription}: ${it.quantity} ${it.unit} x ₹${it.unitPrice} = ₹${it.amount.toLocaleString('en-IN')}`).join('\n')
+    ? order.items.map((it) => `• ${it.itemDescription}: ${it.quantity} ${it.unit} x ₹${it.unitPrice} = ₹${it.amount.toLocaleString('en-IN')}`).join('\n')
     : `• ${order.itemDescription}: ${order.quantity} ${order.unit} = ₹${order.totalAmount.toLocaleString('en-IN')}`;
 
-  const message =
-`*MOHANTY ENTERPRISES*
-Wholesale Dealers & C&F Agents
-Plot 128, Industrial Estate, Rasulgarh, Bhubaneswar
-GSTIN: 21AAAFM9201E1Z8
+  const headerMeta = settings?.address || '';
 
-*COMMERCIAL ${order.isGst ? 'TAX INVOICE' : 'ESTIMATE BILL'}*
-*Bill / Inv No:* ${order.invoiceNo}
+  const message =
+`*${company}*${headerMeta ? `\n${headerMeta}` : ''}
+
+*SALES BILL / ESTIMATE*
+*Bill No:* ${order.invoiceNo}
 *Date:* ${order.date}
 *Billed To:* ${order.customerName}
-*Delivery Location:* ${order.shipToAddress || 'Direct Delivery'}
-*Dispatch Vehicle:* ${order.truckNumber || 'Dispatched'}
+*Delivery Location:* ${order.shipToAddress || '—'}
+*Dispatch Vehicle:* ${order.truckNumber || '—'}
 
 *Items Summary:*
 ${itemsText}
@@ -133,49 +124,40 @@ ${itemsText}
 *Payment Status:* ${order.paymentStatus}
 *Delivery Status:* ${order.status}
 
-_Thank you for trading with Mohanty Enterprises!_`;
+_Thank you for trading with ${company}._`;
 
   return createWhatsAppUrl(order.customerPhone, message);
 }
 
-/**
- * WhatsApp Money Receipt Text Format (Page 2)
- */
-export function generateMoneyReceiptWhatsAppUrl(receipt: MoneyReceipt): string {
+export function generateMoneyReceiptWhatsAppUrl(receipt: MoneyReceipt, settings?: CompanySettings): string {
+  const company = settings?.companyName || 'MOHANTY ENTERPRISES';
+  const headerMeta = settings?.address || '';
+
   const message =
-`*MOHANTY ENTERPRISES - MONEY RECEIPT*
-Plot 128, Industrial Estate, Rasulgarh, Bhubaneswar
-GSTIN: 21AAAFM9201E1Z8
+`*${company} - MONEY RECEIPT*${headerMeta ? `\n${headerMeta}` : ''}
 
 *Receipt No:* ${receipt.receiptNo}
 *Date:* ${receipt.date}
 *Received with thanks from:* ${receipt.partyName}
-*Address:* ${receipt.partyAddress}
-
+${receipt.partyAddress ? `*Address:* ${receipt.partyAddress}\n` : ''}
 *Amount Received:* ${formatINR(receipt.amount)}
 *Amount in words:* ${receipt.amountInWords}
 *Payment Mode:* ${receipt.paymentMode} ${receipt.referenceNo ? `(Ref: ${receipt.referenceNo})` : ''}
 *On Account of:* ${receipt.forAccount}
 
-*Remaining Due Balance:* ${formatINR(receipt.dueAmount)}
-
-_This is a computer-generated confirmation receipt._
-Authorized Signatory: Ayushman Mohanty`;
+*Remaining Due Balance:* ${formatINR(receipt.dueAmount)}${settings?.directorName ? `\n\nAuthorized Signatory: ${settings.directorName}` : ''}`;
 
   return createWhatsAppUrl(receipt.partyPhone, message);
 }
 
-/**
- * WhatsApp Khatabook Reminder Message (Page 3 & 4)
- */
-export function generateLedgerReminderWhatsAppUrl(ledger: CustomerLedger): string {
+export function generateLedgerReminderWhatsAppUrl(ledger: CustomerLedger, settings?: CompanySettings): string {
+  const company = settings?.companyName || 'MOHANTY ENTERPRISES';
   const message =
-`*MOHANTY ENTERPRISES - ACCOUNT BALANCE NOTICE*
+`*${company} - ACCOUNT BALANCE NOTICE*
 To: ${ledger.name}
-GSTIN: ${ledger.gstin}
 
 Dear Customer,
-This is a gentle payment reminder regarding your outstanding balance with Mohanty Enterprises:
+This is a payment reminder regarding your outstanding balance with ${company}:
 
 *Total Billed:* ${formatINR(ledger.totalBilled)}
 *Total Received:* ${formatINR(ledger.totalPaid)}
@@ -184,8 +166,7 @@ This is a gentle payment reminder regarding your outstanding balance with Mohant
 *Oldest Due Period:* ${ledger.oldestDueDays} days
 *Credit Days Allowed:* ${ledger.creditDays} days
 
-Kindly arrange the payment at your earliest convenience via RTGS/NEFT or Cheque.
-For ledger queries, please contact our Accounts Desk at +91 674 258 9120.`;
+Kindly arrange payment at your earliest convenience.${settings?.phone ? `\nFor ledger queries, contact ${settings.phone}.` : ''}`;
 
   return createWhatsAppUrl(ledger.phone, message);
 }

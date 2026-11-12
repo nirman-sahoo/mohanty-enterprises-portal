@@ -1,236 +1,208 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { LoginScreen } from './components/LoginScreen';
 import { Sidebar, NavTab } from './components/Sidebar';
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
 import { DashboardView } from './components/DashboardView';
-import { SaleEntryForm } from './components/SaleEntryForm';
-import { SaleEntryModal } from './components/SaleEntryModal';
-import { InvoiceModal } from './components/InvoiceModal';
-import { InvoicesView } from './components/InvoicesView';
-import { InventoryView } from './components/InventoryView';
-import { LedgerView } from './components/LedgerView';
-import { HRPayrollView } from './components/hr/HRPayrollView';
-import { ReportsView } from './components/ReportsView';
-import { ExpensesView } from './components/ExpensesView';
-import { ProcurementView } from './components/ProcurementView';
-import { BankingView } from './components/BankingView';
-import { AccountMasterView } from './components/AccountMasterView';
-import { JournalView } from './components/JournalView';
+import { SalesVoucherView } from './components/transactions/SalesVoucherView';
+import { PurchaseVoucherView } from './components/transactions/PurchaseVoucherView';
+import { BankBookView } from './components/banking/BankBookView';
+import { CashBookView } from './components/banking/CashBookView';
+import { ContraEntryView } from './components/banking/ContraEntryView';
+import { SalesRegisterView } from './components/reports/SalesRegisterView';
+import { PurchaseRegisterView } from './components/reports/PurchaseRegisterView';
+import { StockReportView } from './components/reports/StockReportView';
+import { PartyOutstandingsView } from './components/reports/PartyOutstandingsView';
+import { PayablesView } from './components/reports/PayablesView';
 import { SettingsView } from './components/SettingsView';
+import { InvoiceModal } from './components/InvoiceModal';
 import { MoneyReceiptModal } from './components/MoneyReceiptModal';
 import { PartyStatementModal } from './components/PartyStatementModal';
-import { 
-  InventoryItem, 
-  SaleRecord, 
-  CustomerLedger, 
-  MoneyReceipt, 
-  StatementEntry,
-  PurchaseRecord,
-  ExpenseRecord,
+import { ReceivePaymentModal } from './components/modals/ReceivePaymentModal';
+import { PaySupplierModal } from './components/modals/PaySupplierModal';
+import {
   BankAccount,
+  CompanySettings,
   ContraEntry,
-  AccountHead,
-  JournalEntry
+  CustomerLedger,
+  InventoryItem,
+  LedgerBookEntry,
+  MoneyReceipt,
+  PaymentVoucher,
+  PurchaseRecord,
+  SaleRecord,
+  StatementEntry,
+  SupplierPayableSummary,
 } from './types';
-import { numberToIndianWords } from './utils/formatters';
 import { testConnection } from './firebase/config';
-import { 
-  subscribeToInventory, 
-  subscribeToOrders, 
+import { computeSupplierPayables, getNextVoucherSequence } from './utils/accountingEngine';
+import {
+  DEFAULT_COMPANY_SETTINGS,
+  subscribeToInventory,
+  subscribeToOrders,
   subscribeToLedgers,
+  subscribeToMoneyReceipts,
+  subscribeToPaymentVouchers,
+  subscribeToPurchases,
+  subscribeToBankAccounts,
+  subscribeToContraEntries,
+  subscribeToCompanySettings,
   createOrderInDb,
+  deleteOrderInDb,
   restockItemInDb,
+  saveInventoryItemInDb,
+  deleteInventoryItemInDb,
   recordPaymentInDb,
+  deleteMoneyReceiptInDb,
   updateFollowUpInDb,
   addStatementEntryInDb,
-  updateOrderGstInDb,
-  subscribeToExpenses,
-  saveExpenseInDb,
-  subscribeToPurchases,
-  savePurchaseInDb,
-  subscribeToBankAccounts,
-  saveBankAccountInDb,
-  subscribeToContraEntries,
-  saveContraEntryInDb,
-  subscribeToAccountHeads,
-  saveAccountHeadInDb,
-  subscribeToJournalEntries,
-  saveJournalEntryInDb,
-  deleteOrderInDb,
-  deletePurchaseInDb,
-  deleteExpenseInDb,
-  deleteJournalEntryInDb,
   deleteLedgerInDb,
+  savePurchaseInDb,
+  deletePurchaseInDb,
+  savePaymentVoucherInDb,
+  deletePaymentVoucherInDb,
+  saveBankAccountInDb,
+  deleteBankAccountInDb,
+  saveContraEntryInDb,
   deleteContraEntryInDb,
-  deleteAccountHeadInDb
+  saveCompanySettingsInDb,
+  resetProductionDatabaseInDb,
 } from './services/firebaseService';
 
 export default function App() {
-  // Authentication state (Default initial view is Login Screen)
+  // Authentication state (LoginScreen kept strictly unchanged)
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  const [operatorName, setOperatorName] = useState<string>('Ayushman Mohanty');
+  const [operatorName, setOperatorName] = useState<string>('Administrator');
 
-  // Navigation tab state
-  const [activeTab, setActiveTab] = useState<NavTab>('overview');
-
-  // Mobile sidebar drawer state
+  // Active Navigation Tab
+  const [activeTab, setActiveTab] = useState<NavTab>('dashboard');
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState<boolean>(false);
 
-  // Live Firebase state (clean production data, no mock records)
+  // Live Firestore collections
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [sales, setSales] = useState<SaleRecord[]>([]);
   const [ledgers, setLedgers] = useState<CustomerLedger[]>([]);
-  const [expenses, setExpenses] = useState<ExpenseRecord[]>([]);
+  const [moneyReceipts, setMoneyReceipts] = useState<MoneyReceipt[]>([]);
+  const [paymentVouchers, setPaymentVouchers] = useState<PaymentVoucher[]>([]);
   const [purchases, setPurchases] = useState<PurchaseRecord[]>([]);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [contraEntries, setContraEntries] = useState<ContraEntry[]>([]);
-  const [accountHeads, setAccountHeads] = useState<AccountHead[]>([]);
-  const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([]);
-  const [isDbLoading, setIsDbLoading] = useState<boolean>(true);
+  const [companySettings, setCompanySettings] = useState<CompanySettings>(DEFAULT_COMPANY_SETTINGS);
 
   // Modals state
-  const [isRecordSaleModalOpen, setIsRecordSaleModalOpen] = useState<boolean>(false);
   const [selectedInvoiceForModal, setSelectedInvoiceForModal] = useState<SaleRecord | null>(null);
   const [selectedReceiptForModal, setSelectedReceiptForModal] = useState<MoneyReceipt | null>(null);
   const [selectedLedgerForStatement, setSelectedLedgerForStatement] = useState<CustomerLedger | null>(null);
 
-  // Initialize live Firestore listeners
+  const [receiveModalConfig, setReceiveModalConfig] = useState<{
+    isOpen: boolean;
+    party: CustomerLedger | null;
+    bookType: 'cash' | 'bank';
+    accountId?: string;
+  }>({
+    isOpen: false,
+    party: null,
+    bookType: 'bank',
+  });
+
+  const [paySupplierModalConfig, setPaySupplierModalConfig] = useState<{
+    isOpen: boolean;
+    supplier: SupplierPayableSummary | null;
+    bookType: 'cash' | 'bank';
+    accountId?: string;
+  }>({
+    isOpen: false,
+    supplier: null,
+    bookType: 'bank',
+  });
+
+  // Live Firestore subscriptions
   useEffect(() => {
     testConnection();
 
-    const unsubInventory = subscribeToInventory((items) => {
-      setInventory(items);
-      setIsDbLoading(false);
-    });
-
-    const unsubOrders = subscribeToOrders((orders) => {
-      setSales(orders);
-    });
-
-    const unsubLedgers = subscribeToLedgers((parties) => {
-      setLedgers(parties);
-    });
-
-    const unsubExpenses = subscribeToExpenses((data) => {
-      setExpenses(data);
-    });
-
-    const unsubPurchases = subscribeToPurchases((data) => {
-      setPurchases(data);
-    });
-
-    const unsubBankAccounts = subscribeToBankAccounts((data) => {
-      setBankAccounts(data);
-    });
-
-    const unsubContra = subscribeToContraEntries((data) => {
-      setContraEntries(data);
-    });
-
-    const unsubAccountHeads = subscribeToAccountHeads((data) => {
-      setAccountHeads(data);
-    });
-
-    const unsubJournal = subscribeToJournalEntries((data) => {
-      setJournalEntries(data);
-    });
+    const unsubInventory = subscribeToInventory(setInventory);
+    const unsubOrders = subscribeToOrders(setSales);
+    const unsubLedgers = subscribeToLedgers(setLedgers);
+    const unsubReceipts = subscribeToMoneyReceipts(setMoneyReceipts);
+    const unsubPayments = subscribeToPaymentVouchers(setPaymentVouchers);
+    const unsubPurchases = subscribeToPurchases(setPurchases);
+    const unsubBanks = subscribeToBankAccounts(setBankAccounts);
+    const unsubContra = subscribeToContraEntries(setContraEntries);
+    const unsubSettings = subscribeToCompanySettings(setCompanySettings);
 
     return () => {
       unsubInventory();
       unsubOrders();
       unsubLedgers();
-      unsubExpenses();
+      unsubReceipts();
+      unsubPayments();
       unsubPurchases();
-      unsubBankAccounts();
+      unsubBanks();
       unsubContra();
-      unsubAccountHeads();
-      unsubJournal();
+      unsubSettings();
     };
   }, []);
 
-  // Record Sale Handler (writes to live Firestore, deducts inventory, syncs ledger)
-  const handleRecordSale = async (newSale: SaleRecord) => {
-    // 1. Optimistically update local modal immediately
-    setSelectedInvoiceForModal(newSale);
+  const supplierPayables = useMemo(
+    () => computeSupplierPayables(purchases, paymentVouchers),
+    [purchases, paymentVouchers]
+  );
 
-    // 2. Persist to live Firestore database
+  // Handlers
+  const handleCreateSale = async (newSale: SaleRecord) => {
     await createOrderInDb(newSale, inventory, ledgers);
+    if (companySettings.autoPrintEstimate) {
+      setSelectedInvoiceForModal(newSale);
+    }
   };
 
-  // Restock inventory handler (writes live to Firestore)
-  const handleRestockItem = async (itemId: string, addQuantity: number) => {
-    const item = inventory.find((i) => i.id === itemId);
-    if (!item) return;
-    await restockItemInDb(itemId, addQuantity, item.stockLevel, item.reorderLevel);
+  const handleDeleteSale = async (sale: SaleRecord) => {
+    await deleteOrderInDb(sale.id, sale, inventory, ledgers);
   };
 
-  // Open Receive Payment and generate official Money Receipt
-  const handleOpenReceivePayment = (party: CustomerLedger) => {
-    const defaultAmount = Math.min(party.outstandingReceivable, 150000) || 50000;
-    const receiptNo = `MR-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
-    const today = new Date().toISOString().split('T')[0];
-
-    const newReceipt: MoneyReceipt = {
-      id: `rcp-${Date.now()}`,
-      receiptNo,
-      date: today,
-      partyName: party.name,
-      partyAddress: party.address,
-      partyPhone: party.phone,
-      amount: defaultAmount,
-      amountInWords: numberToIndianWords(defaultAmount),
-      paymentMode: 'RTGS / NEFT',
-      forAccount: 'CEMENT & TMT MATERIAL SUPPLY A/C',
-      paidAmount: party.totalPaid + defaultAmount,
-      dueAmount: Math.max(0, party.outstandingReceivable - defaultAmount),
-      referenceNo: `UTR-${Math.floor(100000 + Math.random() * 900000)}`,
-    };
-
-    setSelectedReceiptForModal(newReceipt);
-
-    // Persist to live Firestore
-    recordPaymentInDb(newReceipt, party);
+  const handleSaveMoneyReceipt = async (receipt: MoneyReceipt, ledger?: CustomerLedger) => {
+    await recordPaymentInDb(receipt, ledger, ledgers);
+    setSelectedReceiptForModal(receipt);
   };
 
-  // Add manual transaction to party Khatabook statement
-  const handleAddTransactionToLedger = async (ledgerId: string, entry: Omit<StatementEntry, 'id'>) => {
+  const handleDeleteBookEntry = async (entry: LedgerBookEntry) => {
+    if (entry.sourceCollection === 'money_receipts') {
+      const rcp = moneyReceipts.find((r) => r.id === entry.sourceId);
+      if (rcp) await deleteMoneyReceiptInDb(rcp, ledgers);
+    } else if (entry.sourceCollection === 'payment_vouchers') {
+      await deletePaymentVoucherInDb(entry.sourceId);
+    } else if (entry.sourceCollection === 'contra_entries') {
+      await deleteContraEntryInDb(entry.sourceId);
+    }
+  };
+
+  const handleAddStatementEntry = async (ledgerId: string, entry: Omit<StatementEntry, 'id'>) => {
     const ledger = ledgers.find((l) => l.id === ledgerId);
     if (!ledger) return;
     await addStatementEntryInDb(ledger, entry);
   };
 
-  // Update follow-up date and remarks in Khatabook single-format ledger
-  const handleUpdateFollowUp = async (ledgerId: string, nextFollowUpDate: string, note: string) => {
-    await updateFollowUpInDb(ledgerId, nextFollowUpDate, note);
-  };
+  // Keep statement modal synced if ledger updates in Firestore
+  const activeStatementLedger = useMemo(() => {
+    if (!selectedLedgerForStatement) return null;
+    return ledgers.find((l) => l.id === selectedLedgerForStatement.id) || selectedLedgerForStatement;
+  }, [selectedLedgerForStatement, ledgers]);
 
-  // Update GST state on invoice
-  const handleUpdateGst = async (saleId: string, isGst: boolean) => {
-    const sale = sales.find((s) => s.id === saleId);
-    if (!sale) return;
-    const subtotal = sale.subtotal || sale.totalAmount;
-    const gstAmount = isGst ? Math.round(subtotal * 0.18) : 0;
-    const totalAmount = isGst ? subtotal + gstAmount : subtotal;
-    await updateOrderGstInDb(saleId, isGst, subtotal, gstAmount, totalAmount);
-  };
-
-  // 1. LOGIN SCREEN (Default Initial View)
+  // 1. LOGIN SCREEN (Unchanged)
   if (!isAuthenticated) {
     return (
       <LoginScreen
         onLogin={(user) => {
-          setOperatorName(user.toLowerCase().includes('mohanty') ? 'Ayushman Mohanty' : user);
+          setOperatorName(companySettings.directorName || user);
           setIsAuthenticated(true);
         }}
       />
     );
   }
 
-  // 2. AUTHENTICATED LAYOUT
+  // 2. AUTHENTICATED ACCOUNTING WORKSPACE
   return (
     <div className="flex h-screen w-full bg-[#F4F6F9] overflow-hidden font-sans text-slate-900">
-      {/* Sidebar: Dark slate left navigation bar */}
       <Sidebar
         activeTab={activeTab}
         onTabChange={(tab) => {
@@ -240,204 +212,305 @@ export default function App() {
         onSignOut={() => setIsAuthenticated(false)}
         isOpenMobile={isMobileSidebarOpen}
         onCloseMobile={() => setIsMobileSidebarOpen(false)}
+        companyPhone={companySettings.phone}
       />
 
-      {/* Main Workspace Frame */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Top Header matching overview.jpeg */}
         <Header
           activeTab={activeTab}
-          onOpenRecordSale={() => setIsRecordSaleModalOpen(true)}
-          operatorName={operatorName}
+          onNewSalesVoucher={() => setActiveTab('sales-voucher')}
+          operatorName={companySettings.directorName || operatorName}
+          companyName={companySettings.companyName}
+          companyTagline={companySettings.tradeTagline}
+          companySlogan={companySettings.slogan}
+          inventory={inventory}
+          ledgers={ledgers}
+          payables={supplierPayables}
           onSignOut={() => setIsAuthenticated(false)}
           onNavigateToTab={(tab) => setActiveTab(tab)}
           onToggleMobileMenu={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
         />
 
-        {/* Scrollable Content Viewport */}
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-7 bg-[#F4F6F9]">
           <div className="max-w-7xl mx-auto">
-            {activeTab === 'overview' && (
+            {activeTab === 'dashboard' && (
               <DashboardView
                 inventory={inventory}
                 sales={sales}
                 ledgers={ledgers}
                 purchases={purchases}
-                expenses={expenses}
+                moneyReceipts={moneyReceipts}
+                paymentVouchers={paymentVouchers}
                 bankAccounts={bankAccounts}
-                onOpenRecordSale={() => setIsRecordSaleModalOpen(true)}
+                contraEntries={contraEntries}
                 onViewInvoice={(sale) => setSelectedInvoiceForModal(sale)}
                 onNavigateToTab={(tab) => setActiveTab(tab)}
+                onOpenReceivePayment={() =>
+                  setReceiveModalConfig({
+                    isOpen: true,
+                    party: null,
+                    bookType: 'bank',
+                  })
+                }
+                onOpenPaySupplier={() =>
+                  setPaySupplierModalConfig({
+                    isOpen: true,
+                    supplier: null,
+                    bookType: 'bank',
+                  })
+                }
               />
             )}
 
-            {activeTab === 'account-master' && (
-              <AccountMasterView 
-                accounts={accountHeads}
-                onSaveAccount={async (acc) => {
-                  await saveAccountHeadInDb(acc);
-                }}
-                onDeleteAccount={async (acc) => {
-                  await deleteAccountHeadInDb(acc.id);
-                }}
+            {/* TRANSACTIONS GROUP */}
+            {activeTab === 'sales-voucher' && (
+              <SalesVoucherView
+                inventory={inventory}
+                sales={sales}
+                ledgers={ledgers}
+                bankAccounts={bankAccounts}
+                settings={companySettings}
+                onCreateSale={handleCreateSale}
+                onDeleteSale={handleDeleteSale}
+                onViewInvoice={(sale) => setSelectedInvoiceForModal(sale)}
               />
             )}
 
-            {activeTab === 'new-sale' && (
-              <div className="max-w-4xl mx-auto bg-white p-6 sm:p-8 rounded-xl border border-slate-200 shadow-sm">
-                <div className="border-b border-slate-100 pb-4 mb-6">
-                  <h1 className="text-lg font-bold text-slate-900 tracking-tight">
-                    Orders & Estimates Terminal
-                  </h1>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Multi-item order entry, WhatsApp verification pipeline, gate dispatch, and tax invoicing
-                  </p>
-                </div>
-                <SaleEntryForm
-                  inventory={inventory}
-                  onRecordSale={(sale) => {
-                    handleRecordSale(sale);
-                    setActiveTab('overview');
-                  }}
-                  onCancel={() => setActiveTab('overview')}
-                />
-              </div>
-            )}
-
-            {activeTab === 'purchase' && (
-              <ProcurementView 
+            {activeTab === 'purchase-voucher' && (
+              <PurchaseVoucherView
                 inventory={inventory}
                 purchases={purchases}
+                paymentVouchers={paymentVouchers}
+                bankAccounts={bankAccounts}
+                settings={companySettings}
                 onSavePurchase={async (po) => {
                   await savePurchaseInDb(po, inventory);
                 }}
                 onDeletePurchase={async (po) => {
-                  await deletePurchaseInDb(po.id);
+                  await deletePurchaseInDb(po.id, po, inventory);
                 }}
               />
             )}
 
-            {activeTab === 'expenses' && (
-              <ExpensesView 
-                expenses={expenses}
-                onSaveExpense={async (exp) => {
-                  await saveExpenseInDb(exp);
-                }}
-                onDeleteExpense={async (exp) => {
-                  await deleteExpenseInDb(exp.id);
-                }}
-              />
-            )}
-
-            {activeTab === 'invoices' && (
-              <InvoicesView
-                sales={sales}
-                onViewInvoice={(sale) => setSelectedInvoiceForModal(sale)}
-                onOpenRecordSale={() => setIsRecordSaleModalOpen(true)}
-                onDeleteSale={async (sale) => {
-                  await deleteOrderInDb(sale.id, sale, inventory);
-                }}
-              />
-            )}
-
-            {activeTab === 'inventory' && (
-              <InventoryView
-                inventory={inventory}
-                onRestockItem={handleRestockItem}
-                onOpenRecordSale={() => setIsRecordSaleModalOpen(true)}
-              />
-            )}
-
-            {activeTab === 'ledger' && (
-              <LedgerView
-                ledgers={ledgers}
-                onOpenReceivePayment={handleOpenReceivePayment}
-                onOpenStatement={(party) => setSelectedLedgerForStatement(party)}
-                onUpdateFollowUp={handleUpdateFollowUp}
-                onOpenRecordSale={() => setIsRecordSaleModalOpen(true)}
-                onDeleteLedger={async (party) => {
-                  await deleteLedgerInDb(party.id);
-                }}
-              />
-            )}
-
-            {activeTab === 'banking' && (
-              <BankingView 
+            {/* BANKING GROUP */}
+            {activeTab === 'bank-book' && (
+              <BankBookView
                 accounts={bankAccounts}
+                sales={sales}
+                moneyReceipts={moneyReceipts}
+                purchases={purchases}
+                paymentVouchers={paymentVouchers}
                 contraEntries={contraEntries}
-                onSaveAccount={async (acc) => {
-                  await saveBankAccountInDb(acc);
-                }}
-                onSaveContra={async (entry) => {
-                  await saveContraEntryInDb(entry, bankAccounts);
-                }}
+                onOpenReceivePayment={(accountId) =>
+                  setReceiveModalConfig({
+                    isOpen: true,
+                    party: null,
+                    bookType: 'bank',
+                    accountId,
+                  })
+                }
+                onOpenPaySupplier={(accountId) =>
+                  setPaySupplierModalConfig({
+                    isOpen: true,
+                    supplier: null,
+                    bookType: 'bank',
+                    accountId,
+                  })
+                }
+                onDeleteBookEntry={handleDeleteBookEntry}
+              />
+            )}
+
+            {activeTab === 'cash-book' && (
+              <CashBookView
+                accounts={bankAccounts}
+                sales={sales}
+                moneyReceipts={moneyReceipts}
+                purchases={purchases}
+                paymentVouchers={paymentVouchers}
+                contraEntries={contraEntries}
+                onOpenReceivePayment={() =>
+                  setReceiveModalConfig({
+                    isOpen: true,
+                    party: null,
+                    bookType: 'cash',
+                  })
+                }
+                onOpenPaySupplier={() =>
+                  setPaySupplierModalConfig({
+                    isOpen: true,
+                    supplier: null,
+                    bookType: 'cash',
+                  })
+                }
+                onDeleteBookEntry={handleDeleteBookEntry}
+              />
+            )}
+
+            {activeTab === 'contra-entry' && (
+              <ContraEntryView
+                accounts={bankAccounts}
+                sales={sales}
+                moneyReceipts={moneyReceipts}
+                purchases={purchases}
+                paymentVouchers={paymentVouchers}
+                contraEntries={contraEntries}
+                settings={companySettings}
+                onSaveContra={saveContraEntryInDb}
                 onDeleteContra={async (entry) => {
                   await deleteContraEntryInDb(entry.id);
                 }}
               />
             )}
 
-            {activeTab === 'journal' && (
-              <JournalView 
-                entries={journalEntries}
-                onSaveEntry={async (entry) => {
-                  await saveJournalEntryInDb(entry);
-                }}
-                onDeleteEntry={async (entry) => {
-                  await deleteJournalEntryInDb(entry.id);
-                }}
-              />
-            )}
-
-            {activeTab === 'reports' && (
-              <ReportsView
+            {/* REPORTS GROUP */}
+            {activeTab === 'sales-register' && (
+              <SalesRegisterView
                 sales={sales}
-                inventory={inventory}
-                ledgers={ledgers}
-                onOpenRecordSale={() => setIsRecordSaleModalOpen(true)}
+                settings={companySettings}
+                onViewInvoice={(sale) => setSelectedInvoiceForModal(sale)}
+                onNewSalesVoucher={() => setActiveTab('sales-voucher')}
+                onDeleteSale={handleDeleteSale}
               />
             )}
 
-            {activeTab === 'hr-payroll' && (
-              <HRPayrollView />
+            {activeTab === 'purchase-register' && (
+              <PurchaseRegisterView
+                purchases={purchases}
+                paymentVouchers={paymentVouchers}
+                onNewPurchaseVoucher={() => setActiveTab('purchase-voucher')}
+                onPayBill={(supplierName) => {
+                  const matched = supplierPayables.find((s) => s.supplierName === supplierName) || null;
+                  setPaySupplierModalConfig({
+                    isOpen: true,
+                    supplier: matched,
+                    bookType: 'bank',
+                  });
+                }}
+                onDeletePurchase={async (po) => {
+                  await deletePurchaseInDb(po.id, po, inventory);
+                }}
+              />
             )}
 
+            {activeTab === 'stock-report' && (
+              <StockReportView
+                inventory={inventory}
+                purchases={purchases}
+                sales={sales}
+                onRestockItem={async (itemId, addQty) => {
+                  const item = inventory.find((i) => i.id === itemId);
+                  if (item) await restockItemInDb(itemId, addQty, item.stockLevel, item.reorderLevel);
+                }}
+                onSaveItem={saveInventoryItemInDb}
+                onDeleteItem={async (item) => {
+                  await deleteInventoryItemInDb(item.id);
+                }}
+              />
+            )}
+
+            {activeTab === 'party-outstandings' && (
+              <PartyOutstandingsView
+                ledgers={ledgers}
+                moneyReceipts={moneyReceipts}
+                onOpenReceivePayment={(party) =>
+                  setReceiveModalConfig({
+                    isOpen: true,
+                    party,
+                    bookType: 'bank',
+                  })
+                }
+                onOpenStatement={(party) => setSelectedLedgerForStatement(party)}
+                onUpdateFollowUp={updateFollowUpInDb}
+                onNewSalesVoucher={() => setActiveTab('sales-voucher')}
+                onDeleteLedger={async (party) => {
+                  await deleteLedgerInDb(party.id);
+                }}
+                onDeleteMoneyReceipt={async (rcp) => {
+                  await deleteMoneyReceiptInDb(rcp, ledgers);
+                }}
+              />
+            )}
+
+            {activeTab === 'payables' && (
+              <PayablesView
+                purchases={purchases}
+                paymentVouchers={paymentVouchers}
+                onOpenPaySupplier={(supplier) =>
+                  setPaySupplierModalConfig({
+                    isOpen: true,
+                    supplier,
+                    bookType: 'bank',
+                  })
+                }
+                onDeletePaymentVoucher={async (pv) => {
+                  await deletePaymentVoucherInDb(pv.id);
+                }}
+              />
+            )}
+
+            {/* CONFIGURATION GROUP */}
             {activeTab === 'settings' && (
-              <SettingsView />
+              <SettingsView
+                settings={companySettings}
+                bankAccounts={bankAccounts}
+                onSaveSettings={saveCompanySettingsInDb}
+                onSaveBankAccount={saveBankAccountInDb}
+                onDeleteBankAccount={deleteBankAccountInDb}
+                onResetDatabase={resetProductionDatabaseInDb}
+              />
             )}
           </div>
         </main>
 
-        {/* Global Persistent Footer matching overview.jpeg */}
-        <Footer />
+        <Footer settings={companySettings} />
       </div>
 
-      {/* Sale / Order Entry Modal */}
-      <SaleEntryModal
-        isOpen={isRecordSaleModalOpen}
-        onClose={() => setIsRecordSaleModalOpen(false)}
-        inventory={inventory}
-        onRecordSale={handleRecordSale}
+      {/* Shared Modals */}
+      <ReceivePaymentModal
+        isOpen={receiveModalConfig.isOpen}
+        onClose={() => setReceiveModalConfig((prev) => ({ ...prev, isOpen: false }))}
+        ledgers={ledgers}
+        bankAccounts={bankAccounts}
+        initialParty={receiveModalConfig.party}
+        defaultBookType={receiveModalConfig.bookType}
+        defaultAccountId={receiveModalConfig.accountId}
+        receiptPrefix={companySettings.receiptPrefix}
+        nextSequenceNumber={getNextVoucherSequence(moneyReceipts.map((r) => r.receiptNo))}
+        onSaveReceipt={handleSaveMoneyReceipt}
       />
 
-      {/* Commercial Tax / Estimate Invoice Modal */}
+      <PaySupplierModal
+        isOpen={paySupplierModalConfig.isOpen}
+        onClose={() => setPaySupplierModalConfig((prev) => ({ ...prev, isOpen: false }))}
+        payables={supplierPayables}
+        bankAccounts={bankAccounts}
+        paymentVouchers={paymentVouchers}
+        initialSupplier={paySupplierModalConfig.supplier}
+        defaultBookType={paySupplierModalConfig.bookType}
+        defaultAccountId={paySupplierModalConfig.accountId}
+        paymentPrefix={companySettings.paymentPrefix}
+        nextSequenceNumber={getNextVoucherSequence(paymentVouchers.map((v) => v.voucherNo))}
+        onSavePaymentVoucher={savePaymentVoucherInDb}
+      />
+
       <InvoiceModal
         sale={selectedInvoiceForModal}
         onClose={() => setSelectedInvoiceForModal(null)}
-        onUpdateGst={handleUpdateGst}
+        settings={companySettings}
       />
 
-      {/* Official Money Receipt Modal */}
       <MoneyReceiptModal
         receipt={selectedReceiptForModal}
         onClose={() => setSelectedReceiptForModal(null)}
+        settings={companySettings}
       />
 
-      {/* Detailed Khatabook Party Statement Modal */}
       <PartyStatementModal
-        ledger={selectedLedgerForStatement}
+        ledger={activeStatementLedger}
         onClose={() => setSelectedLedgerForStatement(null)}
-        onAddTransaction={handleAddTransactionToLedger}
+        onAddTransaction={handleAddStatementEntry}
+        settings={companySettings}
       />
     </div>
   );

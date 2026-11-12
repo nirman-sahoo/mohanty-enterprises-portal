@@ -1,101 +1,63 @@
-import { 
-  collection, 
-  doc, 
-  setDoc, 
-  getDoc, 
-  getDocs, 
-  updateDoc, 
+import {
+  collection,
+  doc,
+  setDoc,
+  getDocs,
+  updateDoc,
   deleteDoc,
-  onSnapshot, 
-  query, 
-  orderBy,
-  serverTimestamp 
+  onSnapshot,
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { handleFirestoreError, OperationType } from '../firebase/errorHandler';
-import { 
-  InventoryItem, 
-  SaleRecord, 
-  CustomerLedger, 
-  MoneyReceipt, 
+import {
+  InventoryItem,
+  SaleRecord,
+  CustomerLedger,
+  MoneyReceipt,
+  PaymentVoucher,
   StatementEntry,
   Category,
   UnitType,
-  Employee,
-  AttendanceRecord,
-  LeaveRequest,
-  PayrollRecord,
-  LeaveStatus,
-  Department,
-  EmployeeStatus,
-  AttendanceStatus,
-  ExpenseRecord,
   PurchaseRecord,
   BankAccount,
   ContraEntry,
-  JournalEntry,
-  AccountHead,
+  CompanySettings,
 } from '../types';
-import { CATEGORIES, CATEGORY_ITEMS } from '../data/inventoryData';
+import { convertUnitQty, recomputeStatementBalances } from '../utils/accountingEngine';
 
-// Standard 20 catalog SKUs initialized with 0 stock as requested
-const CATALOG_SEEDS: Omit<InventoryItem, 'id'>[] = [
-  // CEMENT
-  { name: 'CEMENT', category: 'CEMENT', stockLevel: 0, unit: 'Bags', reorderLevel: 500, unitPrice: 410, hsnCode: '252329', isCriticalLow: false },
-  { name: 'PPC CEMENT', category: 'CEMENT', stockLevel: 0, unit: 'Bags', reorderLevel: 300, unitPrice: 385, hsnCode: '252329', isCriticalLow: false },
+export const DEFAULT_COMPANY_SETTINGS: CompanySettings = {
+  id: 'company_config',
+  companyName: 'MOHANTY ENTERPRISES',
+  directorName: '',
+  designation: 'Managing Director',
+  tradeTagline: 'CEMENT • STEEL • CONSTRUCTION MATERIALS',
+  slogan: '',
+  gstin: '',
+  pan: '',
+  email: '',
+  phone: '',
+  address: '',
+  invoicePrefix: 'INV/',
+  purchasePrefix: 'PUR/',
+  receiptPrefix: 'MR/',
+  paymentPrefix: 'PAY/',
+  contraPrefix: 'CNT/',
+  defaultGstRate: 0,
+  bankName: '',
+  bankAccount: '',
+  bankIfsc: '',
+  whatsappAlerts: true,
+  autoPrintEstimate: true,
+  roundOffInvoices: true,
+};
 
-  // SCAN TMT BAR
-  { name: 'M/S TMT RODS / BARS 6mm', category: 'SCAN TMT BAR', stockLevel: 0, unit: 'Tons', reorderLevel: 10, unitPrice: 56500, hsnCode: '721420', isCriticalLow: false },
-  { name: 'M/S TMT RODS / BARS 8mm', category: 'SCAN TMT BAR', stockLevel: 0, unit: 'Tons', reorderLevel: 15, unitPrice: 55200, hsnCode: '721420', isCriticalLow: false },
-  { name: 'M/S TMT RODS / BARS 10mm', category: 'SCAN TMT BAR', stockLevel: 0, unit: 'Tons', reorderLevel: 15, unitPrice: 54800, hsnCode: '721420', isCriticalLow: false },
-  { name: 'M/S TMT RODS / BARS 12mm', category: 'SCAN TMT BAR', stockLevel: 0, unit: 'Tons', reorderLevel: 15, unitPrice: 54500, hsnCode: '721420', isCriticalLow: false },
-  { name: 'M/S TMT RODS / BARS 16mm', category: 'SCAN TMT BAR', stockLevel: 0, unit: 'Tons', reorderLevel: 10, unitPrice: 54500, hsnCode: '721420', isCriticalLow: false },
-  { name: 'M/S TMT RODS / BARS 20mm', category: 'SCAN TMT BAR', stockLevel: 0, unit: 'Tons', reorderLevel: 10, unitPrice: 55000, hsnCode: '721420', isCriticalLow: false },
+// ==========================================
+// INVENTORY SUBSCRIPTION & OPERATIONS
+// ==========================================
 
-  // FERTILIZER
-  { name: 'GROMOR 20:20:0:13 50kg', category: 'FERTILIZER', stockLevel: 0, unit: 'Bags', reorderLevel: 200, unitPrice: 1350, hsnCode: '310520', isCriticalLow: false },
-  { name: 'GROMOR 28:28:0 50Kg', category: 'FERTILIZER', stockLevel: 0, unit: 'Bags', reorderLevel: 200, unitPrice: 1650, hsnCode: '310520', isCriticalLow: false },
-  { name: 'GROMOR UREANEEM COATED 45KG', category: 'FERTILIZER', stockLevel: 0, unit: 'Bags', reorderLevel: 300, unitPrice: 266, hsnCode: '310210', isCriticalLow: false },
-  { name: 'Iffco Nano Urea', category: 'FERTILIZER', stockLevel: 0, unit: 'Bags/Bottles', reorderLevel: 150, unitPrice: 225, hsnCode: '310210', isCriticalLow: false },
-  { name: 'MKP IMP (0:52:34) WSF 1KG', category: 'FERTILIZER', stockLevel: 0, unit: 'Pcs', reorderLevel: 100, unitPrice: 240, hsnCode: '310559', isCriticalLow: false },
-  { name: 'NANO DAP', category: 'FERTILIZER', stockLevel: 0, unit: 'Bags/Bottles', reorderLevel: 100, unitPrice: 600, hsnCode: '310530', isCriticalLow: false },
-  { name: 'NANO UREA PLUS 500 ML', category: 'FERTILIZER', stockLevel: 0, unit: 'Bags/Bottles', reorderLevel: 150, unitPrice: 230, hsnCode: '310210', isCriticalLow: false },
-  { name: 'NEEM UREA PH-II (45 KG)', category: 'FERTILIZER', stockLevel: 0, unit: 'Bags', reorderLevel: 250, unitPrice: 266, hsnCode: '310210', isCriticalLow: false },
-  { name: 'PPL BHARAT DAP 18:46', category: 'FERTILIZER', stockLevel: 0, unit: 'Bags', reorderLevel: 200, unitPrice: 1350, hsnCode: '310530', isCriticalLow: false },
-  { name: 'PPL BHARAT NPK 20:20', category: 'FERTILIZER', stockLevel: 0, unit: 'Bags', reorderLevel: 200, unitPrice: 1280, hsnCode: '310520', isCriticalLow: false },
-
-  // Asbestos
-  { name: 'EVERCOOL 2.25M', category: 'Asbestos', stockLevel: 0, unit: 'Pcs', reorderLevel: 100, unitPrice: 680, hsnCode: '681140', isCriticalLow: false },
-  { name: 'EVERCOOL 2.50M', category: 'Asbestos', stockLevel: 0, unit: 'Pcs', reorderLevel: 150, unitPrice: 750, hsnCode: '681140', isCriticalLow: false },
-  { name: 'EVERCOOL 3.00M', category: 'Asbestos', stockLevel: 0, unit: 'Pcs', reorderLevel: 150, unitPrice: 890, hsnCode: '681140', isCriticalLow: false },
-  { name: 'GREY 2.50M', category: 'Asbestos', stockLevel: 0, unit: 'Pcs', reorderLevel: 100, unitPrice: 620, hsnCode: '681140', isCriticalLow: false },
-  { name: 'GREY 3.00M', category: 'Asbestos', stockLevel: 0, unit: 'Pcs', reorderLevel: 100, unitPrice: 740, hsnCode: '681140', isCriticalLow: false },
-];
-
-/**
- * Real-time listener for Inventory.
- * Auto-seeds catalog with 0 stock if collection is empty on first boot.
- */
 export function subscribeToInventory(onData: (items: InventoryItem[]) => void): () => void {
   const colPath = 'inventory';
   const colRef = collection(db, colPath);
-
-  // Check and seed if empty
-  getDocs(colRef).then((snapshot) => {
-    if (snapshot.empty) {
-      console.log('Seeding initial verified catalog with 0 stock in Firestore...');
-      CATALOG_SEEDS.forEach(async (item, index) => {
-        const docId = `sku-${index + 1}`;
-        await setDoc(doc(db, colPath, docId), {
-          ...item,
-          id: docId,
-          updatedAt: new Date().toISOString(),
-        }).catch((err) => handleFirestoreError(err, OperationType.WRITE, colPath));
-      });
-    }
-  }).catch((err) => {
-    handleFirestoreError(err, OperationType.GET, colPath);
-  });
 
   return onSnapshot(
     colRef,
@@ -114,18 +76,58 @@ export function subscribeToInventory(onData: (items: InventoryItem[]) => void): 
           isCriticalLow: (Number(data.stockLevel) || 0) <= (Number(data.reorderLevel) || 0),
         };
       });
+      items.sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
       onData(items);
     },
-    (err) => {
-      handleFirestoreError(err, OperationType.LIST, colPath);
-    }
+    (err) => handleFirestoreError(err, OperationType.LIST, colPath)
   );
 }
 
-/**
- * Real-time listener for Orders & Commercial Invoices.
- * Real production data (starts empty, grows with live billing).
- */
+export async function restockItemInDb(
+  itemId: string,
+  addQuantity: number,
+  currentStock: number,
+  reorderLevel: number
+): Promise<void> {
+  const path = 'inventory';
+  const newStock = Math.max(0, Number((currentStock + addQuantity).toFixed(2)));
+  try {
+    await updateDoc(doc(db, path, itemId), {
+      stockLevel: newStock,
+      isCriticalLow: newStock <= reorderLevel,
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.UPDATE, path);
+  }
+}
+
+export async function saveInventoryItemInDb(item: InventoryItem): Promise<void> {
+  const path = 'inventory';
+  try {
+    await setDoc(doc(db, path, item.id), {
+      ...item,
+      isCriticalLow: item.stockLevel <= item.reorderLevel,
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, path);
+  }
+}
+
+export async function deleteInventoryItemInDb(itemId: string): Promise<void> {
+  const path = 'inventory';
+  try {
+    await deleteDoc(doc(db, path, itemId));
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, path);
+  }
+}
+
+// ==========================================
+// SALES VOUCHERS (ORDERS)
+// ==========================================
+
 export function subscribeToOrders(onData: (orders: SaleRecord[]) => void): () => void {
   const colPath = 'orders';
   const colRef = collection(db, colPath);
@@ -140,6 +142,7 @@ export function subscribeToOrders(onData: (orders: SaleRecord[]) => void): () =>
           invoiceNo: d.invoiceNo || '',
           orderNo: d.orderNo || '',
           customerName: d.customerName || '',
+          customerGstin: d.customerGstin || '',
           shipToAddress: d.shipToAddress || '',
           customerPhone: d.customerPhone || '',
           date: d.date || '',
@@ -150,31 +153,243 @@ export function subscribeToOrders(onData: (orders: SaleRecord[]) => void): () =>
           quantity: Number(d.quantity) || 0,
           unit: d.unit || 'Bags',
           unitPrice: Number(d.unitPrice) || 0,
-          subtotal: Number(d.subtotal) || Number(d.totalAmount) || 0,
-          isGst: d.isGst !== false,
-          gstAmount: Number(d.gstAmount) || 0,
+          subtotal: Number(d.totalAmount) || Number(d.subtotal) || 0,
+          isGst: false,
+          gstRate: 0,
+          gstAmount: 0,
           totalAmount: Number(d.totalAmount) || 0,
           status: d.status || 'Confirmed',
           paymentStatus: d.paymentStatus || 'Credit',
+          paymentMode: d.paymentMode || '',
+          paidAmount: typeof d.paidAmount === 'number' ? d.paidAmount : undefined,
+          bankAccountId: d.bankAccountId || '',
+          bankAccountName: d.bankAccountName || '',
+          paymentReference: d.paymentReference || '',
           truckNumber: d.truckNumber || '',
           notes: d.notes || '',
         };
       });
 
-      // Sort newest first
       orders.sort((a, b) => (b.date + (b.time || '')).localeCompare(a.date + (a.time || '')));
       onData(orders);
     },
-    (err) => {
-      handleFirestoreError(err, OperationType.LIST, colPath);
-    }
+    (err) => handleFirestoreError(err, OperationType.LIST, colPath)
   );
 }
 
 /**
- * Real-time listener for Khatabook Contractor Ledgers.
- * Real production data.
+ * Create Sales Voucher:
+ * 1. Saves order doc to `orders`
+ * 2. Deducts stock from `inventory`
+ * 3. Updates/creates Party Ledger in `ledgers` (debiting totalAmount, crediting any immediate paidAmount)
  */
+export async function createOrderInDb(
+  order: SaleRecord,
+  currentInventory: InventoryItem[],
+  currentLedgers: CustomerLedger[]
+): Promise<void> {
+  const ordersPath = 'orders';
+  try {
+    await setDoc(doc(db, ordersPath, order.id), {
+      ...order,
+      createdAt: new Date().toISOString(),
+    });
+
+    // Deduct inventory (with unit conversion e.g. KG <-> Tons)
+    const inventoryPath = 'inventory';
+    const lineItems = order.items && order.items.length > 0 ? order.items : [order];
+    for (const lineItem of lineItems) {
+      const matchInv = currentInventory.find(
+        (inv) => inv.name.trim().toLowerCase() === (lineItem.itemDescription || '').trim().toLowerCase()
+      );
+      if (matchInv) {
+        const deductQty = convertUnitQty(Number(lineItem.quantity) || 0, lineItem.unit, matchInv.unit);
+        const newStock = Math.max(0, Number((matchInv.stockLevel - deductQty).toFixed(2)));
+        await updateDoc(doc(db, inventoryPath, matchInv.id), {
+          stockLevel: newStock,
+          isCriticalLow: newStock <= matchInv.reorderLevel,
+          updatedAt: new Date().toISOString(),
+        }).catch((err) => handleFirestoreError(err, OperationType.UPDATE, inventoryPath));
+      }
+    }
+
+    // Update or create Customer Ledger
+    const ledgersPath = 'ledgers';
+    const existingLedger = currentLedgers.find(
+      (l) => l.name.trim().toLowerCase() === order.customerName.trim().toLowerCase()
+    );
+
+    const immediatePaid =
+      typeof order.paidAmount === 'number'
+        ? Math.min(order.totalAmount, Math.max(0, order.paidAmount))
+        : order.paymentStatus === 'Paid'
+        ? order.totalAmount
+        : order.paymentStatus === 'Partial'
+        ? Math.round(order.totalAmount * 0.5)
+        : 0;
+
+    const itemQtySummary =
+      order.items && order.items.length > 0
+        ? order.items.map((it) => `${it.itemDescription} (${it.quantity} ${it.unit})`).join(', ')
+        : `${order.itemDescription} (${order.quantity} ${order.unit})`;
+
+    const salesEntry: StatementEntry = {
+      id: `st-sale-${order.id}`,
+      voucherRefId: order.id,
+      date: order.date,
+      voucherType: 'Sales',
+      details: `Sales Voucher #${order.invoiceNo}${order.truckNumber ? ` · ${order.truckNumber}` : ''}`,
+      itemQty: itemQtySummary,
+      debit: order.totalAmount,
+      credit: 0,
+      balance: 0,
+      balanceType: 'Dr',
+    };
+
+    const newStatementEntries: StatementEntry[] = [salesEntry];
+    if (immediatePaid > 0) {
+      newStatementEntries.push({
+        id: `st-salepay-${order.id}`,
+        voucherRefId: order.id,
+        date: order.date,
+        voucherType: 'Payment',
+        details: `Settlement on #${order.invoiceNo} (${order.paymentMode || 'Cash/Bank'})`,
+        itemQty: '-',
+        debit: 0,
+        credit: immediatePaid,
+        balance: 0,
+        balanceType: 'Dr',
+      });
+    }
+
+    if (existingLedger) {
+      const newTotalBilled = (existingLedger.totalBilled || 0) + order.totalAmount;
+      const newTotalPaid = (existingLedger.totalPaid || 0) + immediatePaid;
+      const newOutstanding = Math.max(
+        0,
+        (existingLedger.openingBalance || 0) + newTotalBilled - newTotalPaid
+      );
+      const recomputedEntries = recomputeStatementBalances(
+        existingLedger.openingBalance || 0,
+        [...(existingLedger.statementEntries || []), ...newStatementEntries]
+      );
+
+      await updateDoc(doc(db, ledgersPath, existingLedger.id), {
+        gstin: order.customerGstin || existingLedger.gstin,
+        phone: order.customerPhone || existingLedger.phone,
+        shipToAddress: order.shipToAddress || existingLedger.shipToAddress,
+        totalBilled: newTotalBilled,
+        totalPaid: newTotalPaid,
+        outstandingReceivable: newOutstanding,
+        totalOverdue: newOutstanding,
+        lastTransactionDate: order.date,
+        lastPaymentDate: immediatePaid > 0 ? order.date : existingLedger.lastPaymentDate,
+        statementEntries: recomputedEntries,
+      }).catch((err) => handleFirestoreError(err, OperationType.UPDATE, ledgersPath));
+    } else {
+      const addReceivable = Math.max(0, order.totalAmount - immediatePaid);
+      const recomputedEntries = recomputeStatementBalances(0, newStatementEntries);
+      const newLedgerId = `led-${Date.now()}`;
+      await setDoc(doc(db, ledgersPath, newLedgerId), {
+        id: newLedgerId,
+        name: order.customerName.trim(),
+        gstin: order.customerGstin || '',
+        phone: order.customerPhone || '',
+        address: order.shipToAddress || '',
+        shipToAddress: order.shipToAddress || '',
+        openingBalance: 0,
+        totalBilled: order.totalAmount,
+        totalPaid: immediatePaid,
+        outstandingReceivable: addReceivable,
+        totalOverdue: addReceivable,
+        creditLimit: 0,
+        creditDays: 0,
+        lastPaymentDate: immediatePaid > 0 ? order.date : '',
+        lastTransactionDate: order.date,
+        averageCollectionDays: 0,
+        oldestDueDays: addReceivable > 0 ? 1 : 0,
+        statementEntries: recomputedEntries,
+      }).catch((err) => handleFirestoreError(err, OperationType.WRITE, ledgersPath));
+    }
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, ordersPath);
+  }
+}
+
+export async function deleteOrderInDb(
+  orderId: string,
+  sale?: SaleRecord,
+  currentInventory?: InventoryItem[],
+  currentLedgers?: CustomerLedger[]
+): Promise<void> {
+  const colPath = 'orders';
+  try {
+    await deleteDoc(doc(db, colPath, orderId));
+
+    // Restore stock levels (with unit conversion)
+    if (sale && currentInventory) {
+      const items = sale.items && sale.items.length > 0 ? sale.items : [sale];
+      for (const item of items) {
+        const inv = currentInventory.find(
+          (i) => i.name.trim().toLowerCase() === (item.itemDescription || '').trim().toLowerCase() || i.id === item.id
+        );
+        if (inv) {
+          const restoreQty = convertUnitQty(Number(item.quantity) || 0, item.unit, inv.unit);
+          const restoredStock = Number((inv.stockLevel + restoreQty).toFixed(2));
+          await updateDoc(doc(db, 'inventory', inv.id), {
+            stockLevel: restoredStock,
+            isCriticalLow: restoredStock <= inv.reorderLevel,
+            updatedAt: new Date().toISOString(),
+          }).catch((e) => console.warn('Could not restore stock:', e));
+        }
+      }
+    }
+
+    // Reverse ledger billed, paid, receivable, and recompute chronological statement balances
+    if (sale && currentLedgers) {
+      const party = currentLedgers.find(
+        (l) => l.name.trim().toLowerCase() === sale.customerName.trim().toLowerCase()
+      );
+      if (party) {
+        const immediatePaid =
+          typeof sale.paidAmount === 'number'
+            ? sale.paidAmount
+            : sale.paymentStatus === 'Paid'
+            ? sale.totalAmount
+            : sale.paymentStatus === 'Partial'
+            ? Math.round(sale.totalAmount * 0.5)
+            : 0;
+
+        const filteredEntries = (party.statementEntries || []).filter(
+          (e) =>
+            e.voucherRefId !== sale.id &&
+            (!sale.invoiceNo || !e.details.includes(sale.invoiceNo))
+        );
+
+        const newTotalBilled = Math.max(0, (party.totalBilled || 0) - sale.totalAmount);
+        const newTotalPaid = Math.max(0, (party.totalPaid || 0) - immediatePaid);
+        const newOutstanding = Math.max(0, (party.openingBalance || 0) + newTotalBilled - newTotalPaid);
+        const recomputedEntries = recomputeStatementBalances(party.openingBalance || 0, filteredEntries);
+
+        await updateDoc(doc(db, 'ledgers', party.id), {
+          totalBilled: newTotalBilled,
+          totalPaid: newTotalPaid,
+          outstandingReceivable: newOutstanding,
+          totalOverdue: newOutstanding,
+          statementEntries: recomputedEntries,
+          updatedAt: new Date().toISOString(),
+        }).catch((e) => console.warn('Could not adjust ledger on delete:', e));
+      }
+    }
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, colPath);
+  }
+}
+
+// ==========================================
+// PARTY OUTSTANDINGS / RECEIVABLES LEDGERS
+// ==========================================
+
 export function subscribeToLedgers(onData: (ledgers: CustomerLedger[]) => void): () => void {
   const colPath = 'ledgers';
   const colRef = collection(db, colPath);
@@ -191,15 +406,16 @@ export function subscribeToLedgers(onData: (ledgers: CustomerLedger[]) => void):
           phone: d.phone || '',
           address: d.address || '',
           shipToAddress: d.shipToAddress || '',
+          openingBalance: Number(d.openingBalance) || 0,
           totalBilled: Number(d.totalBilled) || 0,
           totalPaid: Number(d.totalPaid) || 0,
           outstandingReceivable: Number(d.outstandingReceivable) || 0,
           totalOverdue: Number(d.totalOverdue) || 0,
-          creditLimit: Number(d.creditLimit) || 1500000,
-          creditDays: Number(d.creditDays) || 30,
+          creditLimit: Number(d.creditLimit) || 0,
+          creditDays: Number(d.creditDays) || 0,
           lastPaymentDate: d.lastPaymentDate || '',
           lastTransactionDate: d.lastTransactionDate || '',
-          averageCollectionDays: Number(d.averageCollectionDays) || 15,
+          averageCollectionDays: Number(d.averageCollectionDays) || 0,
           oldestDueDays: Number(d.oldestDueDays) || 0,
           nextFollowUpDate: d.nextFollowUpDate || '',
           followUpNote: d.followUpNote || '',
@@ -208,175 +424,13 @@ export function subscribeToLedgers(onData: (ledgers: CustomerLedger[]) => void):
         };
       });
 
-      // Sort by outstanding receivable descending
       ledgers.sort((a, b) => b.outstandingReceivable - a.outstandingReceivable);
       onData(ledgers);
     },
-    (err) => {
-      handleFirestoreError(err, OperationType.LIST, colPath);
-    }
+    (err) => handleFirestoreError(err, OperationType.LIST, colPath)
   );
 }
 
-/**
- * Save new order to Firestore, deduct warehouse inventory stock, and update contractor ledger atomically.
- */
-export async function createOrderInDb(
-  order: SaleRecord,
-  currentInventory: InventoryItem[],
-  currentLedgers: CustomerLedger[]
-): Promise<void> {
-  const ordersPath = 'orders';
-  try {
-    // 1. Write order document
-    await setDoc(doc(db, ordersPath, order.id), {
-      ...order,
-      createdAt: new Date().toISOString(),
-    });
-
-    // 2. Deduct inventory items
-    const inventoryPath = 'inventory';
-    for (const lineItem of (order.items && order.items.length > 0 ? order.items : [order])) {
-      const matchInv = currentInventory.find((inv) => inv.name === lineItem.itemDescription);
-      if (matchInv) {
-        const deductionQty = lineItem.quantity;
-        const newStock = Math.max(0, Number((matchInv.stockLevel - deductionQty).toFixed(2)));
-        await updateDoc(doc(db, inventoryPath, matchInv.id), {
-          stockLevel: newStock,
-          isCriticalLow: newStock <= matchInv.reorderLevel,
-          updatedAt: new Date().toISOString(),
-        }).catch((err) => handleFirestoreError(err, OperationType.UPDATE, inventoryPath));
-      }
-    }
-
-    // 3. Update or create Customer Ledger & Statement
-    const ledgersPath = 'ledgers';
-    const existingLedger = currentLedgers.find(
-      (l) => l.name.toLowerCase() === order.customerName.toLowerCase()
-    );
-
-    const itemQtySummary = order.items && order.items.length > 0
-      ? order.items.map((it) => `${it.itemDescription} (${it.quantity} ${it.unit})`).join(', ')
-      : `${order.itemDescription} (${order.quantity} ${order.unit})`;
-
-    const statementEntry: StatementEntry = {
-      id: `st-${Date.now()}`,
-      date: order.date,
-      voucherType: 'Sales',
-      details: `Bill #${order.invoiceNo} · Dispatched via ${order.truckNumber || 'Fleet'}`,
-      itemQty: itemQtySummary,
-      debit: order.totalAmount,
-      credit: 0,
-      balance: (existingLedger?.outstandingReceivable || 0) + order.totalAmount,
-      balanceType: 'Dr',
-    };
-
-    if (existingLedger) {
-      const isCredit = order.paymentStatus === 'Credit';
-      const isPartial = order.paymentStatus === 'Partial';
-      const addReceivable = isCredit ? order.totalAmount : isPartial ? order.totalAmount * 0.5 : 0;
-
-      await updateDoc(doc(db, ledgersPath, existingLedger.id), {
-        totalBilled: existingLedger.totalBilled + order.totalAmount,
-        outstandingReceivable: existingLedger.outstandingReceivable + addReceivable,
-        totalOverdue: existingLedger.totalOverdue + addReceivable,
-        lastTransactionDate: order.date,
-        statementEntries: [...(existingLedger.statementEntries || []), statementEntry],
-      }).catch((err) => handleFirestoreError(err, OperationType.UPDATE, ledgersPath));
-    } else {
-      const isCredit = order.paymentStatus === 'Credit';
-      const isPaid = order.paymentStatus === 'Paid';
-      const newLedgerId = `led-${Date.now()}`;
-
-      await setDoc(doc(db, ledgersPath, newLedgerId), {
-        id: newLedgerId,
-        name: order.customerName,
-        gstin: '21AAPCM' + Math.floor(1000 + Math.random() * 9000) + 'A1Z' + Math.floor(1 + Math.random() * 9),
-        phone: order.customerPhone || '+91 94370 28190',
-        address: order.shipToAddress || 'Commercial Yard, Odisha',
-        shipToAddress: order.shipToAddress,
-        totalBilled: order.totalAmount,
-        totalPaid: isPaid ? order.totalAmount : 0,
-        outstandingReceivable: isCredit ? order.totalAmount : 0,
-        totalOverdue: isCredit ? order.totalAmount : 0,
-        creditLimit: 1500000,
-        creditDays: 30,
-        lastPaymentDate: order.date,
-        lastTransactionDate: order.date,
-        averageCollectionDays: 15,
-        oldestDueDays: 1,
-        statementEntries: [statementEntry],
-      }).catch((err) => handleFirestoreError(err, OperationType.WRITE, ledgersPath));
-    }
-  } catch (err) {
-    handleFirestoreError(err, OperationType.WRITE, ordersPath);
-  }
-}
-
-/**
- * Restock inventory batch in Firestore.
- */
-export async function restockItemInDb(itemId: string, addQuantity: number, currentStock: number, reorderLevel: number): Promise<void> {
-  const path = 'inventory';
-  const newStock = Number((currentStock + addQuantity).toFixed(2));
-  try {
-    await updateDoc(doc(db, path, itemId), {
-      stockLevel: newStock,
-      isCriticalLow: newStock <= reorderLevel,
-      updatedAt: new Date().toISOString(),
-    });
-  } catch (err) {
-    handleFirestoreError(err, OperationType.UPDATE, path);
-  }
-}
-
-/**
- * Record payment receipt in Firestore, reduce ledger debt, and add payment voucher.
- */
-export async function recordPaymentInDb(
-  receipt: MoneyReceipt,
-  ledger: CustomerLedger
-): Promise<void> {
-  const receiptsPath = 'money_receipts';
-  const ledgersPath = 'ledgers';
-
-  try {
-    // 1. Save Money Receipt
-    await setDoc(doc(db, receiptsPath, receipt.id), {
-      ...receipt,
-      createdAt: new Date().toISOString(),
-    });
-
-    // 2. Update Ledger balance
-    const newOutstanding = Math.max(0, ledger.outstandingReceivable - receipt.amount);
-    const newPaid = ledger.totalPaid + receipt.amount;
-    const newStatementEntry: StatementEntry = {
-      id: `st-${Date.now()}`,
-      date: receipt.date,
-      voucherType: 'Payment',
-      details: `Money Receipt #${receipt.receiptNo} (${receipt.paymentMode})`,
-      itemQty: '-',
-      debit: 0,
-      credit: receipt.amount,
-      balance: newOutstanding,
-      balanceType: 'Dr',
-    };
-
-    await updateDoc(doc(db, ledgersPath, ledger.id), {
-      totalPaid: newPaid,
-      outstandingReceivable: newOutstanding,
-      totalOverdue: Math.max(0, (ledger.totalOverdue || 0) - receipt.amount),
-      lastPaymentDate: receipt.date,
-      statementEntries: [...(ledger.statementEntries || []), newStatementEntry],
-    });
-  } catch (err) {
-    handleFirestoreError(err, OperationType.WRITE, receiptsPath);
-  }
-}
-
-/**
- * Update follow-up collection notes on a ledger party.
- */
 export async function updateFollowUpInDb(ledgerId: string, nextFollowUpDate: string, note: string): Promise<void> {
   const path = 'ledgers';
   try {
@@ -390,9 +444,6 @@ export async function updateFollowUpInDb(ledgerId: string, nextFollowUpDate: str
   }
 }
 
-/**
- * Add manual transaction voucher to party Khatabook statement.
- */
 export async function addStatementEntryInDb(ledger: CustomerLedger, entry: Omit<StatementEntry, 'id'>): Promise<void> {
   const path = 'ledgers';
   const newEntry: StatementEntry = {
@@ -400,349 +451,195 @@ export async function addStatementEntryInDb(ledger: CustomerLedger, entry: Omit<
     id: `st-${Date.now()}`,
   };
 
-  const updatedEntries = [...(ledger.statementEntries || []), newEntry];
-  const newOutstanding = entry.debit > 0
-    ? ledger.outstandingReceivable + entry.debit
-    : Math.max(0, ledger.outstandingReceivable - entry.credit);
+  const newTotalBilled = (ledger.totalBilled || 0) + (Number(entry.debit) || 0);
+  const newTotalPaid = (ledger.totalPaid || 0) + (Number(entry.credit) || 0);
+  const newOutstanding = Math.max(0, (ledger.openingBalance || 0) + newTotalBilled - newTotalPaid);
+  const recomputedEntries = recomputeStatementBalances(ledger.openingBalance || 0, [
+    ...(ledger.statementEntries || []),
+    newEntry,
+  ]);
 
   try {
     await updateDoc(doc(db, path, ledger.id), {
+      totalBilled: newTotalBilled,
+      totalPaid: newTotalPaid,
       outstandingReceivable: newOutstanding,
-      statementEntries: updatedEntries,
+      totalOverdue: newOutstanding,
+      statementEntries: recomputedEntries,
       lastTransactionDate: entry.date,
+      lastPaymentDate: entry.credit > 0 ? entry.date : ledger.lastPaymentDate,
     });
   } catch (err) {
     handleFirestoreError(err, OperationType.UPDATE, path);
   }
 }
 
-/**
- * Update GST mode on an order.
- */
-export async function updateOrderGstInDb(orderId: string, isGst: boolean, subtotal: number, gstAmount: number, totalAmount: number): Promise<void> {
-  const path = 'orders';
+export async function deleteLedgerInDb(ledgerId: string): Promise<void> {
+  const colPath = 'ledgers';
   try {
-    await updateDoc(doc(db, path, orderId), {
-      isGst,
-      subtotal,
-      gstAmount,
-      totalAmount,
-    });
+    await deleteDoc(doc(db, colPath, ledgerId));
   } catch (err) {
-    handleFirestoreError(err, OperationType.UPDATE, path);
+    handleFirestoreError(err, OperationType.DELETE, colPath);
   }
 }
 
 // ==========================================
-// HR & PAYROLL MANAGEMENT SERVICES
+// MONEY RECEIPTS (CUSTOMER COLLECTIONS -> CASH / BANK BOOK)
 // ==========================================
 
-export const INITIAL_EMPLOYEES: Employee[] = [];
-
-/**
- * Real-time listener for Employee Master.
- * Real production data (starts empty, populated by admin via Employee Master).
- */
-export function subscribeToEmployees(onData: (employees: Employee[]) => void): () => void {
-  const colPath = 'employees';
+export function subscribeToMoneyReceipts(onData: (receipts: MoneyReceipt[]) => void): () => void {
+  const colPath = 'money_receipts';
   const colRef = collection(db, colPath);
 
   return onSnapshot(
     colRef,
     (snapshot) => {
-      const emps: Employee[] = snapshot.docs.map((docSnap) => {
+      const receipts: MoneyReceipt[] = snapshot.docs.map((docSnap) => {
         const d = docSnap.data();
         return {
           id: docSnap.id,
-          empCode: d.empCode || `ME-${docSnap.id.slice(-4).toUpperCase()}`,
-          name: d.name || '',
-          department: d.department || 'Admin',
-          designation: d.designation || '',
-          phone: d.phone || '',
-          email: d.email || '',
-          joiningDate: d.joiningDate || '',
-          monthlySalary: Number(d.monthlySalary) || 30000,
-          bankAccount: d.bankAccount || '',
-          bankIfsc: d.bankIfsc || '',
-          panNo: d.panNo || '',
-          status: d.status || 'Active',
-        };
-      });
-      // Sort alphabetically by name
-      emps.sort((a, b) => a.name.localeCompare(b.name));
-      onData(emps);
-    },
-    (err) => {
-      handleFirestoreError(err, OperationType.LIST, colPath);
-    }
-  );
-}
-
-/**
- * Create or update an employee in Firestore.
- */
-export async function saveEmployeeInDb(employee: Employee): Promise<void> {
-  const colPath = 'employees';
-  try {
-    await setDoc(doc(db, colPath, employee.id), {
-      ...employee,
-      updatedAt: new Date().toISOString(),
-    });
-  } catch (err) {
-    handleFirestoreError(err, OperationType.WRITE, colPath);
-  }
-}
-
-/**
- * Real-time listener for Attendance Records for a specific date (YYYY-MM-DD).
- */
-export function subscribeToAttendance(
-  dateStr: string,
-  onData: (records: AttendanceRecord[]) => void
-): () => void {
-  const colPath = 'attendance_logs';
-  const colRef = collection(db, colPath);
-
-  return onSnapshot(
-    colRef,
-    (snapshot) => {
-      const records: AttendanceRecord[] = snapshot.docs
-        .map((docSnap) => {
-          const d = docSnap.data();
-          return {
-            id: docSnap.id,
-            employeeId: d.employeeId || '',
-            employeeName: d.employeeName || '',
-            department: d.department || 'Admin',
-            date: d.date || '',
-            status: d.status || 'Present',
-            checkInTime: d.checkInTime || '',
-            checkOutTime: d.checkOutTime || '',
-            notes: d.notes || '',
-          };
-        })
-        .filter((r) => r.date === dateStr);
-
-      onData(records);
-    },
-    (err) => {
-      handleFirestoreError(err, OperationType.LIST, colPath);
-    }
-  );
-}
-
-/**
- * Save single attendance entry.
- */
-export async function recordAttendanceInDb(record: AttendanceRecord): Promise<void> {
-  const colPath = 'attendance_logs';
-  try {
-    await setDoc(doc(db, colPath, record.id), {
-      ...record,
-      updatedAt: new Date().toISOString(),
-    });
-  } catch (err) {
-    handleFirestoreError(err, OperationType.WRITE, colPath);
-  }
-}
-
-/**
- * Bulk save attendance entries.
- */
-export async function bulkMarkAttendanceInDb(records: AttendanceRecord[]): Promise<void> {
-  const colPath = 'attendance_logs';
-  try {
-    for (const rec of records) {
-      await setDoc(doc(db, colPath, rec.id), {
-        ...rec,
-        updatedAt: new Date().toISOString(),
-      });
-    }
-  } catch (err) {
-    handleFirestoreError(err, OperationType.WRITE, colPath);
-  }
-}
-
-/**
- * Real-time listener for Leave Requests.
- */
-export function subscribeToLeaves(onData: (leaves: LeaveRequest[]) => void): () => void {
-  const colPath = 'leave_requests';
-  const colRef = collection(db, colPath);
-
-  return onSnapshot(
-    colRef,
-    (snapshot) => {
-      const leaves: LeaveRequest[] = snapshot.docs.map((docSnap) => {
-        const d = docSnap.data();
-        return {
-          id: docSnap.id,
-          employeeId: d.employeeId || '',
-          employeeName: d.employeeName || '',
-          department: d.department || 'Admin',
-          leaveType: d.leaveType || 'Casual',
-          startDate: d.startDate || '',
-          endDate: d.endDate || '',
-          days: Number(d.days) || 1,
-          reason: d.reason || '',
-          status: d.status || 'Pending',
-          appliedOn: d.appliedOn || '',
-        };
-      });
-      // Sort newest first
-      leaves.sort((a, b) => b.appliedOn.localeCompare(a.appliedOn));
-      onData(leaves);
-    },
-    (err) => {
-      handleFirestoreError(err, OperationType.LIST, colPath);
-    }
-  );
-}
-
-/**
- * Submit or update Leave Request.
- */
-export async function saveLeaveRequestInDb(request: LeaveRequest): Promise<void> {
-  const colPath = 'leave_requests';
-  try {
-    await setDoc(doc(db, colPath, request.id), {
-      ...request,
-      updatedAt: new Date().toISOString(),
-    });
-  } catch (err) {
-    handleFirestoreError(err, OperationType.WRITE, colPath);
-  }
-}
-
-/**
- * Update Leave Request status.
- */
-export async function updateLeaveStatusInDb(requestId: string, status: LeaveStatus): Promise<void> {
-  const colPath = 'leave_requests';
-  try {
-    await updateDoc(doc(db, colPath, requestId), {
-      status,
-      updatedAt: new Date().toISOString(),
-    });
-  } catch (err) {
-    handleFirestoreError(err, OperationType.UPDATE, colPath);
-  }
-}
-
-/**
- * Real-time listener for Payroll Records.
- */
-export function subscribeToPayroll(
-  monthStr: string,
-  onData: (records: PayrollRecord[]) => void
-): () => void {
-  const colPath = 'payroll_records';
-  const colRef = collection(db, colPath);
-
-  return onSnapshot(
-    colRef,
-    (snapshot) => {
-      const records: PayrollRecord[] = snapshot.docs
-        .map((docSnap) => {
-          const d = docSnap.data();
-          return {
-            id: docSnap.id,
-            month: d.month || '',
-            employeeId: d.employeeId || '',
-            employeeName: d.employeeName || '',
-            department: d.department || 'Admin',
-            designation: d.designation || '',
-            basicSalary: Number(d.basicSalary) || 0,
-            allowances: Number(d.allowances) || 0,
-            pfDeduction: Number(d.pfDeduction) || 0,
-            taxDeduction: Number(d.taxDeduction) || 0,
-            netSalary: Number(d.netSalary) || 0,
-            paymentStatus: d.paymentStatus || 'Pending',
-            paymentDate: d.paymentDate || '',
-            bankReference: d.bankReference || '',
-          };
-        })
-        .filter((r) => r.month === monthStr);
-
-      onData(records);
-    },
-    (err) => {
-      handleFirestoreError(err, OperationType.LIST, colPath);
-    }
-  );
-}
-
-/**
- * Mark Payroll as Paid.
- */
-export async function markPayrollPaidInDb(
-  recordId: string,
-  paymentDate: string,
-  bankRef: string
-): Promise<void> {
-  const colPath = 'payroll_records';
-  try {
-    await updateDoc(doc(db, colPath, recordId), {
-      paymentStatus: 'Paid',
-      paymentDate,
-      bankReference: bankRef,
-      updatedAt: new Date().toISOString(),
-    });
-  } catch (err) {
-    handleFirestoreError(err, OperationType.UPDATE, colPath);
-  }
-}
-
-// ==========================================
-// COMMERCIAL EXPENSES SERVICES
-// ==========================================
-
-export function subscribeToExpenses(onData: (expenses: ExpenseRecord[]) => void): () => void {
-  const colPath = 'expenses';
-  const colRef = collection(db, colPath);
-
-  return onSnapshot(
-    colRef,
-    (snapshot) => {
-      const expenses: ExpenseRecord[] = snapshot.docs.map((docSnap) => {
-        const d = docSnap.data();
-        return {
-          id: docSnap.id,
-          expenseNo: d.expenseNo || '',
+          receiptNo: d.receiptNo || '',
           date: d.date || '',
-          category: d.category || 'Logistics & Diesel',
-          description: d.description || '',
+          partyName: d.partyName || '',
+          partyAddress: d.partyAddress || '',
+          partyPhone: d.partyPhone || '',
           amount: Number(d.amount) || 0,
+          amountInWords: d.amountInWords || '',
           paymentMode: d.paymentMode || 'Cash',
-          paidTo: d.paidTo || '',
-          approvedBy: d.approvedBy || 'Ayushman Mohanty',
-          status: d.status || 'Approved',
+          bankAccountId: d.bankAccountId || '',
+          bankAccountName: d.bankAccountName || '',
+          forAccount: d.forAccount || '',
+          paidAmount: Number(d.paidAmount) || 0,
+          dueAmount: Number(d.dueAmount) || 0,
+          referenceNo: d.referenceNo || '',
+          remarks: d.remarks || '',
         };
       });
-      // Sort newest date first
-      expenses.sort((a, b) => b.date.localeCompare(a.date));
-      onData(expenses);
+      receipts.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+      onData(receipts);
     },
-    (err) => {
-      handleFirestoreError(err, OperationType.LIST, colPath);
-    }
+    (err) => handleFirestoreError(err, OperationType.LIST, colPath)
   );
 }
 
-export async function saveExpenseInDb(expense: ExpenseRecord): Promise<void> {
-  const colPath = 'expenses';
+export async function recordPaymentInDb(
+  receipt: MoneyReceipt,
+  ledger?: CustomerLedger,
+  allLedgers?: CustomerLedger[]
+): Promise<void> {
+  const receiptsPath = 'money_receipts';
+  const ledgersPath = 'ledgers';
+
   try {
-    await setDoc(doc(db, colPath, expense.id), {
-      ...expense,
-      updatedAt: new Date().toISOString(),
+    await setDoc(doc(db, receiptsPath, receipt.id), {
+      ...receipt,
+      createdAt: new Date().toISOString(),
     });
+
+    const targetLedger =
+      ledger ||
+      (allLedgers || []).find(
+        (l) => l.name.trim().toLowerCase() === receipt.partyName.trim().toLowerCase()
+      );
+
+    const newStatementEntry: StatementEntry = {
+      id: `st-rcp-${receipt.id}`,
+      voucherRefId: receipt.id,
+      date: receipt.date,
+      voucherType: 'Payment',
+      details: `Money Receipt #${receipt.receiptNo} (${receipt.paymentMode}${receipt.bankAccountName ? ` · ${receipt.bankAccountName}` : ''})`,
+      itemQty: '-',
+      debit: 0,
+      credit: receipt.amount,
+      balance: 0,
+      balanceType: 'Dr',
+    };
+
+    if (targetLedger) {
+      const newPaid = (targetLedger.totalPaid || 0) + receipt.amount;
+      const newOutstanding = Math.max(
+        0,
+        (targetLedger.openingBalance || 0) + (targetLedger.totalBilled || 0) - newPaid
+      );
+      const recomputedEntries = recomputeStatementBalances(targetLedger.openingBalance || 0, [
+        ...(targetLedger.statementEntries || []),
+        newStatementEntry,
+      ]);
+
+      await updateDoc(doc(db, ledgersPath, targetLedger.id), {
+        totalPaid: newPaid,
+        outstandingReceivable: newOutstanding,
+        totalOverdue: newOutstanding,
+        lastPaymentDate: receipt.date,
+        lastTransactionDate: receipt.date,
+        statementEntries: recomputedEntries,
+      });
+    } else if (receipt.partyName.trim()) {
+      const newLedgerId = `led-${Date.now()}`;
+      const recomputedEntries = recomputeStatementBalances(0, [newStatementEntry]);
+      await setDoc(doc(db, ledgersPath, newLedgerId), {
+        id: newLedgerId,
+        name: receipt.partyName.trim(),
+        gstin: '',
+        phone: receipt.partyPhone || '',
+        address: receipt.partyAddress || '',
+        shipToAddress: '',
+        openingBalance: 0,
+        totalBilled: 0,
+        totalPaid: receipt.amount,
+        outstandingReceivable: 0,
+        totalOverdue: 0,
+        creditLimit: 0,
+        creditDays: 0,
+        lastPaymentDate: receipt.date,
+        lastTransactionDate: receipt.date,
+        averageCollectionDays: 0,
+        oldestDueDays: 0,
+        statementEntries: recomputedEntries,
+      });
+    }
   } catch (err) {
-    handleFirestoreError(err, OperationType.WRITE, colPath);
+    handleFirestoreError(err, OperationType.WRITE, receiptsPath);
+  }
+}
+
+export async function deleteMoneyReceiptInDb(
+  receipt: MoneyReceipt,
+  currentLedgers: CustomerLedger[]
+): Promise<void> {
+  const receiptsPath = 'money_receipts';
+  try {
+    await deleteDoc(doc(db, receiptsPath, receipt.id));
+
+    const ledger = currentLedgers.find(
+      (l) => l.name.trim().toLowerCase() === receipt.partyName.trim().toLowerCase()
+    );
+    if (ledger) {
+      const filteredEntries = (ledger.statementEntries || []).filter(
+        (e) => e.voucherRefId !== receipt.id && (!receipt.receiptNo || !e.details.includes(receipt.receiptNo))
+      );
+      const newPaid = Math.max(0, (ledger.totalPaid || 0) - receipt.amount);
+      const newOutstanding = Math.max(
+        0,
+        (ledger.openingBalance || 0) + (ledger.totalBilled || 0) - newPaid
+      );
+      const recomputedEntries = recomputeStatementBalances(ledger.openingBalance || 0, filteredEntries);
+
+      await updateDoc(doc(db, 'ledgers', ledger.id), {
+        totalPaid: newPaid,
+        outstandingReceivable: newOutstanding,
+        totalOverdue: newOutstanding,
+        statementEntries: recomputedEntries,
+        updatedAt: new Date().toISOString(),
+      }).catch((e) => console.warn('Could not reverse ledger on receipt delete:', e));
+    }
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, receiptsPath);
   }
 }
 
 // ==========================================
-// MATERIAL PROCUREMENT / PURCHASE SERVICES
+// PURCHASE VOUCHERS & STOCK INWARD
 // ==========================================
 
 export function subscribeToPurchases(onData: (purchases: PurchaseRecord[]) => void): () => void {
@@ -759,23 +656,31 @@ export function subscribeToPurchases(onData: (purchases: PurchaseRecord[]) => vo
           purchaseNo: d.purchaseNo || '',
           supplierName: d.supplierName || '',
           supplierGst: d.supplierGst || '',
+          supplierPhone: d.supplierPhone || '',
+          supplierAddress: d.supplierAddress || '',
           date: d.date || '',
           category: d.category || 'CEMENT',
           items: d.items || [],
-          subtotal: Number(d.subtotal) || 0,
-          gstAmount: Number(d.gstAmount) || 0,
+          subtotal: Number(d.totalAmount) || Number(d.subtotal) || 0,
+          isGst: false,
+          gstRate: 0,
+          gstAmount: 0,
           totalAmount: Number(d.totalAmount) || 0,
-          paymentStatus: d.paymentStatus || 'Paid',
+          paymentStatus: d.paymentStatus || 'Pending',
+          paymentMode: d.paymentMode || 'Credit',
+          paidAmount: typeof d.paidAmount === 'number' ? d.paidAmount : undefined,
+          bankAccountId: d.bankAccountId || '',
+          bankAccountName: d.bankAccountName || '',
+          paymentReference: d.paymentReference || '',
           truckNumber: d.truckNumber || '',
           challanNo: d.challanNo || '',
+          notes: d.notes || '',
         };
       });
-      purchases.sort((a, b) => b.date.localeCompare(a.date));
+      purchases.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
       onData(purchases);
     },
-    (err) => {
-      handleFirestoreError(err, OperationType.LIST, colPath);
-    }
+    (err) => handleFirestoreError(err, OperationType.LIST, colPath)
   );
 }
 
@@ -785,25 +690,47 @@ export async function savePurchaseInDb(
 ): Promise<void> {
   const colPath = 'purchases';
   try {
-    // 1. Write purchase PO document
     await setDoc(doc(db, colPath, purchase.id), {
       ...purchase,
       updatedAt: new Date().toISOString(),
     });
 
-    // 2. Auto-restock matching warehouse items
+    // Increase warehouse inventory for existing items, or create new SKU automatically
     const inventoryPath = 'inventory';
-    for (const item of purchase.items) {
+    for (let idx = 0; idx < purchase.items.length; idx++) {
+      const item = purchase.items[idx];
       const matchInv = currentInventory.find(
-        (inv) => inv.id === item.itemId || inv.name.toLowerCase() === item.itemName.toLowerCase()
+        (inv) =>
+          (item.itemId && inv.id === item.itemId) ||
+          inv.name.trim().toLowerCase() === item.itemName.trim().toLowerCase()
       );
       if (matchInv) {
-        const newStock = Number((matchInv.stockLevel + item.quantity).toFixed(2));
+        const addQty = convertUnitQty(Number(item.quantity) || 0, item.unit, matchInv.unit);
+        const newStock = Number((matchInv.stockLevel + addQty).toFixed(2));
         await updateDoc(doc(db, inventoryPath, matchInv.id), {
           stockLevel: newStock,
+          unitPrice: item.rate > 0 ? item.rate : matchInv.unitPrice,
           isCriticalLow: newStock <= matchInv.reorderLevel,
           updatedAt: new Date().toISOString(),
         }).catch((err) => handleFirestoreError(err, OperationType.UPDATE, inventoryPath));
+      } else if (item.itemName.trim()) {
+        const newSkuId = item.itemId && /^[a-zA-Z0-9_-]+$/.test(item.itemId) ? item.itemId : `sku-${Date.now()}-${idx}`;
+        const qty = Number(item.quantity) || 0;
+        const newItem: InventoryItem = {
+          id: newSkuId,
+          name: item.itemName.trim(),
+          category: item.category,
+          stockLevel: qty,
+          unit: item.unit,
+          reorderLevel: 0,
+          unitPrice: Number(item.rate) || 0,
+          hsnCode: '',
+          isCriticalLow: false,
+        };
+        await setDoc(doc(db, inventoryPath, newSkuId), {
+          ...newItem,
+          updatedAt: new Date().toISOString(),
+        }).catch((err) => handleFirestoreError(err, OperationType.WRITE, inventoryPath));
       }
     }
   } catch (err) {
@@ -811,60 +738,124 @@ export async function savePurchaseInDb(
   }
 }
 
+export async function deletePurchaseInDb(
+  purchaseId: string,
+  purchase?: PurchaseRecord,
+  currentInventory?: InventoryItem[]
+): Promise<void> {
+  const colPath = 'purchases';
+  try {
+    await deleteDoc(doc(db, colPath, purchaseId));
+
+    // Reverse added stock from inventory (with unit conversion)
+    if (purchase && currentInventory && purchase.items) {
+      for (const item of purchase.items) {
+        const inv = currentInventory.find(
+          (i) => i.id === item.itemId || i.name.trim().toLowerCase() === item.itemName.trim().toLowerCase()
+        );
+        if (inv) {
+          const reverseQty = convertUnitQty(Number(item.quantity) || 0, item.unit, inv.unit);
+          const adjustedStock = Math.max(0, Number((inv.stockLevel - reverseQty).toFixed(2)));
+          await updateDoc(doc(db, 'inventory', inv.id), {
+            stockLevel: adjustedStock,
+            isCriticalLow: adjustedStock <= inv.reorderLevel,
+            updatedAt: new Date().toISOString(),
+          }).catch((e) => console.warn('Could not reverse purchase stock:', e));
+        }
+      }
+    }
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, colPath);
+  }
+}
+
 // ==========================================
-// BANKING & CASH ACCOUNTS SERVICES
+// SUPPLIER PAYMENT VOUCHERS (PAYABLES -> CASH / BANK BOOK)
+// ==========================================
+
+export function subscribeToPaymentVouchers(onData: (vouchers: PaymentVoucher[]) => void): () => void {
+  const colPath = 'payment_vouchers';
+  const colRef = collection(db, colPath);
+
+  return onSnapshot(
+    colRef,
+    (snapshot) => {
+      const vouchers: PaymentVoucher[] = snapshot.docs.map((docSnap) => {
+        const d = docSnap.data();
+        return {
+          id: docSnap.id,
+          voucherNo: d.voucherNo || '',
+          date: d.date || '',
+          supplierName: d.supplierName || '',
+          supplierGst: d.supplierGst || '',
+          purchaseId: d.purchaseId || '',
+          purchaseNo: d.purchaseNo || '',
+          amount: Number(d.amount) || 0,
+          paymentMode: d.paymentMode || 'Cash',
+          bankAccountId: d.bankAccountId || 'bank-drawer',
+          bankAccountName: d.bankAccountName || '',
+          referenceNo: d.referenceNo || '',
+          remarks: d.remarks || '',
+        };
+      });
+      vouchers.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+      onData(vouchers);
+    },
+    (err) => handleFirestoreError(err, OperationType.LIST, colPath)
+  );
+}
+
+export async function savePaymentVoucherInDb(voucher: PaymentVoucher): Promise<void> {
+  const colPath = 'payment_vouchers';
+  try {
+    await setDoc(doc(db, colPath, voucher.id), {
+      ...voucher,
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, colPath);
+  }
+}
+
+export async function deletePaymentVoucherInDb(voucherId: string): Promise<void> {
+  const colPath = 'payment_vouchers';
+  try {
+    await deleteDoc(doc(db, colPath, voucherId));
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, colPath);
+  }
+}
+
+// ==========================================
+// BANK & CASH ACCOUNTS SERVICES
 // ==========================================
 
 export function subscribeToBankAccounts(onData: (accounts: BankAccount[]) => void): () => void {
   const colPath = 'bank_accounts';
   const colRef = collection(db, colPath);
 
-  // Initialize standard accounts with 0 balance if empty
-  getDocs(colRef).then((snapshot) => {
-    if (snapshot.empty) {
-      const defaultAccounts: BankAccount[] = [
-        {
-          id: 'bank-sbi',
-          bankName: 'State Bank of India (Current A/C)',
-          accountNumber: '394821004921',
-          branch: 'Choudwar Industrial Branch, Cuttack',
-          ifsc: 'SBIN0001234',
-          accountType: 'Current',
-          currentBalance: 0,
-          unclearedChequesCount: 0,
-          status: 'Reconciled',
-        },
-        {
-          id: 'bank-hdfc',
-          bankName: 'HDFC Corporate Current A/C',
-          accountNumber: '50200084719201',
-          branch: 'Bajrakabati Road Corporate, Cuttack',
-          ifsc: 'HDFC0000412',
-          accountType: 'Current',
-          currentBalance: 0,
-          unclearedChequesCount: 0,
-          status: 'Reconciled',
-        },
-        {
+  getDocs(colRef)
+    .then((snapshot) => {
+      if (snapshot.empty) {
+        const drawerAccount: BankAccount = {
           id: 'bank-drawer',
-          bankName: 'Office Cash in Safe Drawer',
-          accountNumber: 'DRAWER-01',
-          branch: 'Headquarters Dispatch Counter',
-          ifsc: 'N/A',
+          bankName: 'Office Cash Drawer',
+          accountNumber: 'CASH-01',
+          branch: 'Cash Counter',
+          ifsc: 'CASH',
           accountType: 'Cash Drawer',
+          openingBalance: 0,
           currentBalance: 0,
           unclearedChequesCount: 0,
           status: 'Active',
-        },
-      ];
-      defaultAccounts.forEach(async (acc) => {
-        await setDoc(doc(db, colPath, acc.id), {
-          ...acc,
+        };
+        setDoc(doc(db, colPath, drawerAccount.id), {
+          ...drawerAccount,
           updatedAt: new Date().toISOString(),
         }).catch((err) => handleFirestoreError(err, OperationType.WRITE, colPath));
-      });
-    }
-  }).catch((err) => handleFirestoreError(err, OperationType.GET, colPath));
+      }
+    })
+    .catch((err) => handleFirestoreError(err, OperationType.GET, colPath));
 
   return onSnapshot(
     colRef,
@@ -878,6 +869,7 @@ export function subscribeToBankAccounts(onData: (accounts: BankAccount[]) => voi
           branch: d.branch || '',
           ifsc: d.ifsc || '',
           accountType: d.accountType || 'Current',
+          openingBalance: Number(d.openingBalance) || 0,
           currentBalance: Number(d.currentBalance) || 0,
           unclearedChequesCount: Number(d.unclearedChequesCount) || 0,
           status: d.status || 'Active',
@@ -885,9 +877,7 @@ export function subscribeToBankAccounts(onData: (accounts: BankAccount[]) => voi
       });
       onData(accounts);
     },
-    (err) => {
-      handleFirestoreError(err, OperationType.LIST, colPath);
-    }
+    (err) => handleFirestoreError(err, OperationType.LIST, colPath)
   );
 }
 
@@ -900,6 +890,15 @@ export async function saveBankAccountInDb(account: BankAccount): Promise<void> {
     });
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, colPath);
+  }
+}
+
+export async function deleteBankAccountInDb(accountId: string): Promise<void> {
+  const colPath = 'bank_accounts';
+  try {
+    await deleteDoc(doc(db, colPath, accountId));
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, colPath);
   }
 }
 
@@ -920,266 +919,31 @@ export function subscribeToContraEntries(onData: (entries: ContraEntry[]) => voi
           id: docSnap.id,
           voucherNo: d.voucherNo || '',
           date: d.date || '',
+          fromAccountId: d.fromAccountId || '',
           fromAccount: d.fromAccount || '',
+          toAccountId: d.toAccountId || '',
           toAccount: d.toAccount || '',
           amount: Number(d.amount) || 0,
           referenceNo: d.referenceNo || '',
           remarks: d.remarks || '',
         };
       });
-      entries.sort((a, b) => b.date.localeCompare(a.date));
+      entries.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
       onData(entries);
     },
-    (err) => {
-      handleFirestoreError(err, OperationType.LIST, colPath);
-    }
+    (err) => handleFirestoreError(err, OperationType.LIST, colPath)
   );
 }
 
-export async function saveContraEntryInDb(
-  entry: ContraEntry,
-  currentAccounts: BankAccount[]
-): Promise<void> {
+export async function saveContraEntryInDb(entry: ContraEntry): Promise<void> {
   const contraPath = 'contra_entries';
-  const accountsPath = 'bank_accounts';
-
   try {
-    // 1. Save Contra document
     await setDoc(doc(db, contraPath, entry.id), {
       ...entry,
       updatedAt: new Date().toISOString(),
     });
-
-    // 2. Adjust source and destination bank balances
-    const fromAcc = currentAccounts.find((a) => a.bankName === entry.fromAccount);
-    const toAcc = currentAccounts.find((a) => a.bankName === entry.toAccount);
-
-    if (fromAcc) {
-      const newBal = fromAcc.currentBalance - entry.amount;
-      await updateDoc(doc(db, accountsPath, fromAcc.id), {
-        currentBalance: newBal,
-        updatedAt: new Date().toISOString(),
-      }).catch((err) => handleFirestoreError(err, OperationType.UPDATE, accountsPath));
-    }
-
-    if (toAcc) {
-      const newBal = toAcc.currentBalance + entry.amount;
-      await updateDoc(doc(db, accountsPath, toAcc.id), {
-        currentBalance: newBal,
-        updatedAt: new Date().toISOString(),
-      }).catch((err) => handleFirestoreError(err, OperationType.UPDATE, accountsPath));
-    }
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, contraPath);
-  }
-}
-
-// ==========================================
-// ACCOUNT MASTER / CHART OF ACCOUNTS SERVICES
-// ==========================================
-
-export function subscribeToAccountHeads(onData: (heads: AccountHead[]) => void): () => void {
-  const colPath = 'account_heads';
-  const colRef = collection(db, colPath);
-
-  // Initialize default chart of accounts with 0 balance if empty
-  getDocs(colRef).then((snapshot) => {
-    if (snapshot.empty) {
-      const defaultHeads: AccountHead[] = [
-        { id: 'acc-1', code: '1001', name: 'State Bank of India (Current A/C)', group: 'Current Assets', balance: 0, balanceType: 'Dr' },
-        { id: 'acc-2', code: '1002', name: 'HDFC Corporate Current A/C', group: 'Current Assets', balance: 0, balanceType: 'Dr' },
-        { id: 'acc-3', code: '1003', name: 'Office Safe Cash Drawer', group: 'Current Assets', balance: 0, balanceType: 'Dr' },
-        { id: 'acc-4', code: '1004', name: 'Sundry Debtors (Wholesale Contractors)', group: 'Current Assets', balance: 0, balanceType: 'Dr' },
-        { id: 'acc-5', code: '1005', name: 'Warehouse Material Stock Inventory', group: 'Current Assets', balance: 0, balanceType: 'Dr' },
-        { id: 'acc-6', code: '2001', name: 'Sundry Creditors (Manufacturers & Mills)', group: 'Current Liabilities', balance: 0, balanceType: 'Cr' },
-        { id: 'acc-7', code: '2002', name: 'GST Output Liability (18% & 28%)', group: 'Current Liabilities', balance: 0, balanceType: 'Cr' },
-        { id: 'acc-8', code: '3001', name: 'Sales Account - Cement Wholesale', group: 'Direct Incomes', balance: 0, balanceType: 'Cr' },
-        { id: 'acc-9', code: '3002', name: 'Sales Account - SCAN TMT Bars', group: 'Direct Incomes', balance: 0, balanceType: 'Cr' },
-        { id: 'acc-10', code: '4001', name: 'Yard Labour & Hamali Charges', group: 'Direct Expenses', balance: 0, balanceType: 'Dr' },
-        { id: 'acc-11', code: '4002', name: 'Truck Diesel & Delivery Freight', group: 'Direct Expenses', balance: 0, balanceType: 'Dr' },
-      ];
-      defaultHeads.forEach(async (head) => {
-        await setDoc(doc(db, colPath, head.id), {
-          ...head,
-          updatedAt: new Date().toISOString(),
-        }).catch((err) => handleFirestoreError(err, OperationType.WRITE, colPath));
-      });
-    }
-  }).catch((err) => handleFirestoreError(err, OperationType.GET, colPath));
-
-  return onSnapshot(
-    colRef,
-    (snapshot) => {
-      const heads: AccountHead[] = snapshot.docs.map((docSnap) => {
-        const d = docSnap.data();
-        return {
-          id: docSnap.id,
-          code: d.code || '',
-          name: d.name || '',
-          group: d.group || 'Current Assets',
-          balance: Number(d.balance) || 0,
-          balanceType: d.balanceType || 'Dr',
-        };
-      });
-      heads.sort((a, b) => a.code.localeCompare(b.code));
-      onData(heads);
-    },
-    (err) => {
-      handleFirestoreError(err, OperationType.LIST, colPath);
-    }
-  );
-}
-
-export async function saveAccountHeadInDb(head: AccountHead): Promise<void> {
-  const colPath = 'account_heads';
-  try {
-    await setDoc(doc(db, colPath, head.id), {
-      ...head,
-      updatedAt: new Date().toISOString(),
-    });
-  } catch (err) {
-    handleFirestoreError(err, OperationType.WRITE, colPath);
-  }
-}
-
-// ==========================================
-// JOURNAL VOUCHERS (JV) SERVICES
-// ==========================================
-
-export function subscribeToJournalEntries(onData: (entries: JournalEntry[]) => void): () => void {
-  const colPath = 'journal_vouchers';
-  const colRef = collection(db, colPath);
-
-  return onSnapshot(
-    colRef,
-    (snapshot) => {
-      const entries: JournalEntry[] = snapshot.docs.map((docSnap) => {
-        const d = docSnap.data();
-        return {
-          id: docSnap.id,
-          jvNo: d.jvNo || '',
-          date: d.date || '',
-          debitAccount: d.debitAccount || '',
-          debitAmount: Number(d.debitAmount) || 0,
-          creditAccount: d.creditAccount || '',
-          creditAmount: Number(d.creditAmount) || 0,
-          narration: d.narration || '',
-          authorizedBy: d.authorizedBy || 'Ayushman Mohanty',
-        };
-      });
-      entries.sort((a, b) => b.date.localeCompare(a.date));
-      onData(entries);
-    },
-    (err) => {
-      handleFirestoreError(err, OperationType.LIST, colPath);
-    }
-  );
-}
-
-export async function saveJournalEntryInDb(entry: JournalEntry): Promise<void> {
-  const colPath = 'journal_vouchers';
-  try {
-    await setDoc(doc(db, colPath, entry.id), {
-      ...entry,
-      updatedAt: new Date().toISOString(),
-    });
-  } catch (err) {
-    handleFirestoreError(err, OperationType.WRITE, colPath);
-  }
-}
-
-// ==========================================
-// DELETION HANDLERS FOR PRODUCTION ENTRIES
-// ==========================================
-
-export async function deleteOrderInDb(
-  orderId: string,
-  sale?: SaleRecord,
-  currentInventory?: InventoryItem[],
-  currentLedgers?: CustomerLedger[]
-): Promise<void> {
-  const colPath = 'orders';
-  try {
-    // 1. Delete order doc
-    await deleteDoc(doc(db, colPath, orderId));
-
-    // 2. Optionally restore stock levels if sale item details are provided
-    if (sale && currentInventory) {
-      if (sale.items && sale.items.length > 0) {
-        for (const item of sale.items) {
-          const inv = currentInventory.find(i => i.name === item.itemDescription || i.id === item.id);
-          if (inv) {
-            const restoredStock = inv.stockLevel + item.quantity;
-            await updateDoc(doc(db, 'inventory', inv.id), {
-              stockLevel: restoredStock,
-              isCriticalLow: restoredStock <= inv.reorderLevel,
-              updatedAt: new Date().toISOString(),
-            }).catch(e => console.warn('Could not restore stock:', e));
-          }
-        }
-      }
-    }
-
-    // 3. Optionally reverse ledger billed balance
-    if (sale && currentLedgers) {
-      const party = currentLedgers.find(l => l.name.toLowerCase() === sale.customerName.toLowerCase());
-      if (party) {
-        const newBilled = Math.max(0, party.totalBilled - sale.totalAmount);
-        const newReceivable = Math.max(0, party.outstandingReceivable - sale.totalAmount);
-        await updateDoc(doc(db, 'ledgers', party.id), {
-          totalBilled: newBilled,
-          outstandingReceivable: newReceivable,
-          updatedAt: new Date().toISOString(),
-        }).catch(e => console.warn('Could not adjust ledger on delete:', e));
-      }
-    }
-  } catch (err) {
-    handleFirestoreError(err, OperationType.DELETE, colPath);
-  }
-}
-
-export async function deletePurchaseInDb(purchaseId: string): Promise<void> {
-  const colPath = 'purchases';
-  try {
-    await deleteDoc(doc(db, colPath, purchaseId));
-  } catch (err) {
-    handleFirestoreError(err, OperationType.DELETE, colPath);
-  }
-}
-
-export async function deleteExpenseInDb(expenseId: string): Promise<void> {
-  const colPath = 'expenses';
-  try {
-    await deleteDoc(doc(db, colPath, expenseId));
-  } catch (err) {
-    handleFirestoreError(err, OperationType.DELETE, colPath);
-  }
-}
-
-export async function deleteJournalEntryInDb(jvId: string): Promise<void> {
-  const colPath = 'journal_vouchers';
-  try {
-    await deleteDoc(doc(db, colPath, jvId));
-  } catch (err) {
-    handleFirestoreError(err, OperationType.DELETE, colPath);
-  }
-}
-
-export async function deleteEmployeeInDb(employeeId: string): Promise<void> {
-  const colPath = 'employees';
-  try {
-    await deleteDoc(doc(db, colPath, employeeId));
-  } catch (err) {
-    handleFirestoreError(err, OperationType.DELETE, colPath);
-  }
-}
-
-export async function deleteLedgerInDb(ledgerId: string): Promise<void> {
-  const colPath = 'ledgers';
-  try {
-    await deleteDoc(doc(db, colPath, ledgerId));
-  } catch (err) {
-    handleFirestoreError(err, OperationType.DELETE, colPath);
   }
 }
 
@@ -1192,13 +956,125 @@ export async function deleteContraEntryInDb(contraId: string): Promise<void> {
   }
 }
 
-export async function deleteAccountHeadInDb(headId: string): Promise<void> {
-  const colPath = 'account_heads';
+// ==========================================
+// ENTERPRISE CONFIGURATION SETTINGS
+// ==========================================
+
+export function subscribeToCompanySettings(onData: (settings: CompanySettings) => void): () => void {
+  const colPath = 'settings';
+  const docId = 'company_config';
+  const colRef = collection(db, colPath);
+
+  getDocs(colRef)
+    .then((snapshot) => {
+      if (snapshot.empty) {
+        setDoc(doc(db, colPath, docId), {
+          ...DEFAULT_COMPANY_SETTINGS,
+          updatedAt: new Date().toISOString(),
+        }).catch((err) => handleFirestoreError(err, OperationType.WRITE, colPath));
+      }
+    })
+    .catch((err) => handleFirestoreError(err, OperationType.GET, colPath));
+
+  return onSnapshot(
+    doc(db, colPath, docId),
+    (docSnap) => {
+      if (docSnap.exists()) {
+        const d = docSnap.data();
+        onData({
+          ...DEFAULT_COMPANY_SETTINGS,
+          ...d,
+          id: docSnap.id,
+          defaultGstRate: 0,
+        });
+      } else {
+        onData(DEFAULT_COMPANY_SETTINGS);
+      }
+    },
+    (err) => handleFirestoreError(err, OperationType.GET, `${colPath}/${docId}`)
+  );
+}
+
+export async function saveCompanySettingsInDb(settings: CompanySettings): Promise<void> {
+  const colPath = 'settings';
   try {
-    await deleteDoc(doc(db, colPath, headId));
+    await setDoc(doc(db, colPath, settings.id || 'company_config'), {
+      ...settings,
+      updatedAt: new Date().toISOString(),
+    });
   } catch (err) {
-    handleFirestoreError(err, OperationType.DELETE, colPath);
+    handleFirestoreError(err, OperationType.WRITE, colPath);
   }
 }
 
+// ==========================================
+// FRESH PRODUCTION DATABASE RESET
+// ==========================================
+
+export async function resetProductionDatabaseInDb(): Promise<void> {
+  const collectionsToClear = [
+    'orders',
+    'purchases',
+    'ledgers',
+    'money_receipts',
+    'payment_vouchers',
+    'contra_entries',
+    'inventory',
+  ];
+
+  for (const colName of collectionsToClear) {
+    try {
+      const snap = await getDocs(collection(db, colName));
+      await Promise.all(
+        snap.docs.map((d) =>
+          deleteDoc(doc(db, colName, d.id)).catch((err) =>
+            handleFirestoreError(err, OperationType.DELETE, colName)
+          )
+        )
+      );
+    } catch (err) {
+      handleFirestoreError(err, OperationType.LIST, colName);
+    }
+  }
+
+  // Clear non-drawer banks and reset Cash Drawer cleanly to 0
+  const bankCol = 'bank_accounts';
+  try {
+    const bankSnap = await getDocs(collection(db, bankCol));
+    await Promise.all(
+      bankSnap.docs.map((d) => {
+        if (d.id === 'bank-drawer') {
+          return setDoc(doc(db, bankCol, d.id), {
+            id: 'bank-drawer',
+            bankName: 'Office Cash Drawer',
+            accountNumber: 'CASH-01',
+            branch: 'Cash Counter',
+            ifsc: 'CASH',
+            accountType: 'Cash Drawer',
+            openingBalance: 0,
+            currentBalance: 0,
+            unclearedChequesCount: 0,
+            status: 'Active',
+            updatedAt: new Date().toISOString(),
+          }).catch((err) => handleFirestoreError(err, OperationType.WRITE, bankCol));
+        }
+        return deleteDoc(doc(db, bankCol, d.id)).catch((err) =>
+          handleFirestoreError(err, OperationType.DELETE, bankCol)
+        );
+      })
+    );
+  } catch (err) {
+    handleFirestoreError(err, OperationType.LIST, bankCol);
+  }
+
+  // Reset company configuration to clean non-GST production defaults
+  try {
+    await setDoc(doc(db, 'settings', 'company_config'), {
+      ...DEFAULT_COMPANY_SETTINGS,
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, 'settings');
+  }
+}
 

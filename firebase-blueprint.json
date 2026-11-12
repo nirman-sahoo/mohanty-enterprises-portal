@@ -18,13 +18,14 @@
       "required": ["name", "category", "stockLevel", "unit", "unitPrice"]
     },
     "orderRecord": {
-      "title": "Commercial Order Record",
-      "description": "B2B wholesale order and invoice record",
+      "title": "Sales Voucher Record",
+      "description": "B2B wholesale sales voucher and invoice record",
       "type": "object",
       "properties": {
         "orderNo": { "type": "string", "maxLength": 50 },
         "invoiceNo": { "type": "string", "maxLength": 50 },
         "customerName": { "type": "string", "maxLength": 150 },
+        "customerGstin": { "type": "string", "maxLength": 30 },
         "shipToAddress": { "type": "string", "maxLength": 250 },
         "customerPhone": { "type": "string", "maxLength": 30 },
         "date": { "type": "string", "maxLength": 20 },
@@ -36,10 +37,16 @@
         "unitPrice": { "type": "number" },
         "subtotal": { "type": "number" },
         "isGst": { "type": "boolean" },
+        "gstRate": { "type": "number" },
         "gstAmount": { "type": "number" },
         "totalAmount": { "type": "number" },
         "status": { "type": "string", "enum": ["Pending Verification", "Confirmed", "In Transit", "Delivered", "Cancelled"] },
         "paymentStatus": { "type": "string", "enum": ["Paid", "Credit", "Partial"] },
+        "paymentMode": { "type": "string", "maxLength": 50 },
+        "paidAmount": { "type": "number" },
+        "bankAccountId": { "type": "string", "maxLength": 80 },
+        "bankAccountName": { "type": "string", "maxLength": 120 },
+        "paymentReference": { "type": "string", "maxLength": 80 },
         "truckNumber": { "type": "string", "maxLength": 30 }
       },
       "required": ["orderNo", "invoiceNo", "customerName", "totalAmount", "status", "paymentStatus"]
@@ -54,6 +61,7 @@
         "phone": { "type": "string", "maxLength": 30 },
         "address": { "type": "string", "maxLength": 250 },
         "shipToAddress": { "type": "string", "maxLength": 250 },
+        "openingBalance": { "type": "number" },
         "totalBilled": { "type": "number" },
         "totalPaid": { "type": "number" },
         "outstandingReceivable": { "type": "number" },
@@ -72,7 +80,7 @@
     },
     "moneyReceipt": {
       "title": "Money Receipt Record",
-      "description": "Official cash/bank money receipt voucher",
+      "description": "Official cash/bank money receipt voucher from customer",
       "type": "object",
       "properties": {
         "receiptNo": { "type": "string", "maxLength": 50 },
@@ -83,16 +91,40 @@
         "amount": { "type": "number" },
         "amountInWords": { "type": "string", "maxLength": 300 },
         "paymentMode": { "type": "string", "enum": ["Cash", "RTGS / NEFT", "UPI / QR", "Cheque / DD"] },
+        "bankAccountId": { "type": "string", "maxLength": 80 },
+        "bankAccountName": { "type": "string", "maxLength": 120 },
         "forAccount": { "type": "string", "maxLength": 150 },
         "paidAmount": { "type": "number" },
         "dueAmount": { "type": "number" },
-        "referenceNo": { "type": "string", "maxLength": 50 }
+        "referenceNo": { "type": "string", "maxLength": 50 },
+        "remarks": { "type": "string", "maxLength": 250 }
       },
       "required": ["receiptNo", "partyName", "amount", "paymentMode"]
     },
+    "paymentVoucher": {
+      "title": "Supplier Payment Voucher",
+      "description": "Cash or bank payment voucher issued to supplier",
+      "type": "object",
+      "properties": {
+        "voucherNo": { "type": "string", "maxLength": 50 },
+        "date": { "type": "string", "maxLength": 20 },
+        "supplierName": { "type": "string", "maxLength": 150 },
+        "supplierGst": { "type": "string", "maxLength": 30 },
+        "purchaseId": { "type": "string", "maxLength": 80 },
+        "purchaseNo": { "type": "string", "maxLength": 50 },
+        "amount": { "type": "number" },
+        "paymentMode": { "type": "string", "enum": ["Cash", "RTGS / NEFT", "UPI / QR", "Cheque / DD"] },
+        "bankAccountId": { "type": "string", "maxLength": 80 },
+        "bankAccountName": { "type": "string", "maxLength": 120 },
+        "referenceNo": { "type": "string", "maxLength": 80 },
+        "remarks": { "type": "string", "maxLength": 250 },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["voucherNo", "supplierName", "amount", "paymentMode", "bankAccountId"]
+    },
     "bankAccount": {
       "title": "Bank Account Record",
-      "description": "Operating bank account and safe cash drawer",
+      "description": "Operating bank account and headquarters cash drawer",
       "type": "object",
       "properties": {
         "bankName": { "type": "string", "maxLength": 100 },
@@ -100,6 +132,7 @@
         "branch": { "type": "string", "maxLength": 100 },
         "ifsc": { "type": "string", "maxLength": 20 },
         "accountType": { "type": "string", "enum": ["Current", "Cash Credit (CC)", "Cash Drawer"] },
+        "openingBalance": { "type": "number" },
         "currentBalance": { "type": "number" },
         "unclearedChequesCount": { "type": "number" },
         "status": { "type": "string", "enum": ["Active", "Reconciled"] },
@@ -109,12 +142,14 @@
     },
     "contraEntry": {
       "title": "Bank Contra Voucher",
-      "description": "Funds transfer between company accounts and cash drawer",
+      "description": "Funds transfer between company bank accounts and cash drawer",
       "type": "object",
       "properties": {
         "voucherNo": { "type": "string", "maxLength": 50 },
         "date": { "type": "string", "maxLength": 20 },
+        "fromAccountId": { "type": "string", "maxLength": 80 },
         "fromAccount": { "type": "string", "maxLength": 100 },
+        "toAccountId": { "type": "string", "maxLength": 80 },
         "toAccount": { "type": "string", "maxLength": 100 },
         "amount": { "type": "number" },
         "referenceNo": { "type": "string", "maxLength": 50 },
@@ -123,131 +158,56 @@
       },
       "required": ["voucherNo", "fromAccount", "toAccount", "amount"]
     },
-    "expenseRecord": {
-      "title": "Expense Voucher",
-      "description": "Operating and administrative expense record",
-      "type": "object",
-      "properties": {
-        "expenseNo": { "type": "string", "maxLength": 50 },
-        "date": { "type": "string", "maxLength": 20 },
-        "category": { "type": "string", "maxLength": 50 },
-        "description": { "type": "string", "maxLength": 200 },
-        "amount": { "type": "number" },
-        "paymentMode": { "type": "string", "maxLength": 50 },
-        "paidTo": { "type": "string", "maxLength": 100 },
-        "approvedBy": { "type": "string", "maxLength": 100 },
-        "status": { "type": "string", "enum": ["Approved", "Pending", "Rejected"] },
-        "updatedAt": { "type": "string" }
-      },
-      "required": ["expenseNo", "category", "amount"]
-    },
     "purchaseRecord": {
-      "title": "Procurement Purchase Record",
-      "description": "Manufacturer consignment and purchase order",
+      "title": "Purchase Voucher Record",
+      "description": "Manufacturer consignment and purchase voucher",
       "type": "object",
       "properties": {
         "purchaseNo": { "type": "string", "maxLength": 50 },
         "supplierName": { "type": "string", "maxLength": 150 },
         "supplierGst": { "type": "string", "maxLength": 30 },
+        "supplierPhone": { "type": "string", "maxLength": 30 },
+        "supplierAddress": { "type": "string", "maxLength": 250 },
         "date": { "type": "string", "maxLength": 20 },
         "category": { "type": "string", "maxLength": 50 },
         "subtotal": { "type": "number" },
+        "isGst": { "type": "boolean" },
+        "gstRate": { "type": "number" },
         "gstAmount": { "type": "number" },
         "totalAmount": { "type": "number" },
         "paymentStatus": { "type": "string", "enum": ["Paid", "Pending", "Partial"] },
+        "paymentMode": { "type": "string", "maxLength": 50 },
+        "paidAmount": { "type": "number" },
+        "bankAccountId": { "type": "string", "maxLength": 80 },
+        "bankAccountName": { "type": "string", "maxLength": 120 },
+        "paymentReference": { "type": "string", "maxLength": 80 },
         "truckNumber": { "type": "string", "maxLength": 30 },
         "challanNo": { "type": "string", "maxLength": 50 },
         "updatedAt": { "type": "string" }
       },
       "required": ["purchaseNo", "supplierName", "totalAmount"]
     },
-    "accountHead": {
-      "title": "Account Head",
-      "description": "Chart of accounts master head",
+    "companySettings": {
+      "title": "Company Configuration",
+      "description": "Enterprise GSTIN, voucher prefix, and default accounting settings",
       "type": "object",
       "properties": {
-        "code": { "type": "string", "maxLength": 20 },
-        "name": { "type": "string", "maxLength": 100 },
-        "group": { "type": "string", "maxLength": 50 },
-        "balance": { "type": "number" },
-        "balanceType": { "type": "string", "enum": ["Dr", "Cr"] },
-        "updatedAt": { "type": "string" }
-      },
-      "required": ["code", "name", "group"]
-    },
-    "journalEntry": {
-      "title": "Journal Voucher Entry",
-      "description": "Double-entry book adjustment voucher",
-      "type": "object",
-      "properties": {
-        "jvNo": { "type": "string", "maxLength": 50 },
-        "date": { "type": "string", "maxLength": 20 },
-        "debitAccount": { "type": "string", "maxLength": 100 },
-        "debitAmount": { "type": "number" },
-        "creditAccount": { "type": "string", "maxLength": 100 },
-        "creditAmount": { "type": "number" },
-        "narration": { "type": "string", "maxLength": 250 },
-        "authorizedBy": { "type": "string", "maxLength": 100 },
-        "updatedAt": { "type": "string" }
-      },
-      "required": ["jvNo", "debitAmount", "creditAmount"]
-    },
-    "employee": {
-      "title": "Employee Profile",
-      "description": "Staff master profile",
-      "type": "object",
-      "properties": {
-        "empCode": { "type": "string", "maxLength": 50 },
-        "name": { "type": "string", "maxLength": 150 },
-        "department": { "type": "string", "maxLength": 50 },
-        "designation": { "type": "string", "maxLength": 100 },
+        "companyName": { "type": "string", "maxLength": 150 },
+        "directorName": { "type": "string", "maxLength": 100 },
+        "gstin": { "type": "string", "maxLength": 30 },
+        "pan": { "type": "string", "maxLength": 20 },
+        "email": { "type": "string", "maxLength": 120 },
         "phone": { "type": "string", "maxLength": 30 },
-        "email": { "type": "string", "maxLength": 100 },
-        "monthlySalary": { "type": "number" },
-        "status": { "type": "string", "enum": ["Active", "On Leave", "Inactive"] },
+        "address": { "type": "string", "maxLength": 300 },
+        "invoicePrefix": { "type": "string", "maxLength": 30 },
+        "purchasePrefix": { "type": "string", "maxLength": 30 },
+        "receiptPrefix": { "type": "string", "maxLength": 30 },
+        "paymentPrefix": { "type": "string", "maxLength": 30 },
+        "contraPrefix": { "type": "string", "maxLength": 30 },
+        "defaultGstRate": { "type": "number" },
         "updatedAt": { "type": "string" }
       },
-      "required": ["empCode", "name", "department", "monthlySalary"]
-    },
-    "attendanceRecord": {
-      "title": "Daily Attendance Log",
-      "description": "Daily employee attendance log",
-      "type": "object",
-      "properties": {
-        "employeeId": { "type": "string", "maxLength": 50 },
-        "employeeName": { "type": "string", "maxLength": 150 },
-        "date": { "type": "string", "maxLength": 20 },
-        "status": { "type": "string", "enum": ["Present", "Absent", "On Leave", "Half Day"] },
-        "updatedAt": { "type": "string" }
-      },
-      "required": ["employeeId", "date", "status"]
-    },
-    "payrollRecord": {
-      "title": "Monthly Payroll Record",
-      "description": "Staff salary disbursement record",
-      "type": "object",
-      "properties": {
-        "employeeId": { "type": "string", "maxLength": 50 },
-        "employeeName": { "type": "string", "maxLength": 150 },
-        "month": { "type": "string", "maxLength": 30 },
-        "netSalary": { "type": "number" },
-        "status": { "type": "string", "enum": ["Processed", "Paid", "Hold"] },
-        "updatedAt": { "type": "string" }
-      },
-      "required": ["employeeId", "month", "netSalary"]
-    },
-    "leaveRequest": {
-      "title": "Leave Request",
-      "description": "Staff leave approval application",
-      "type": "object",
-      "properties": {
-        "employeeId": { "type": "string", "maxLength": 50 },
-        "employeeName": { "type": "string", "maxLength": 150 },
-        "leaveType": { "type": "string", "maxLength": 50 },
-        "status": { "type": "string", "enum": ["Pending", "Approved", "Rejected"] },
-        "updatedAt": { "type": "string" }
-      },
-      "required": ["employeeId", "leaveType", "status"]
+      "required": ["companyName", "gstin"]
     }
   },
   "firestore": {
@@ -257,15 +217,19 @@
     },
     "/orders/{orderId}": {
       "schema": { "$ref": "#/entities/orderRecord" },
-      "description": "B2B sales and multi-item commercial orders"
+      "description": "B2B sales vouchers and commercial invoices"
     },
     "/ledgers/{ledgerId}": {
       "schema": { "$ref": "#/entities/customerLedger" },
-      "description": "Khatabook contractor directory and credit ledger"
+      "description": "Party outstandings directory and credit ledger"
     },
     "/money_receipts/{receiptId}": {
       "schema": { "$ref": "#/entities/moneyReceipt" },
-      "description": "Official payment receipt vouchers with amount in words"
+      "description": "Official customer payment receipt vouchers"
+    },
+    "/payment_vouchers/{voucherId}": {
+      "schema": { "$ref": "#/entities/paymentVoucher" },
+      "description": "Supplier payment vouchers linked to payables and cash/bank books"
     },
     "/bank_accounts/{accId}": {
       "schema": { "$ref": "#/entities/bankAccount" },
@@ -275,37 +239,13 @@
       "schema": { "$ref": "#/entities/contraEntry" },
       "description": "Internal contra transfers between cash and bank accounts"
     },
-    "/expenses/{expenseId}": {
-      "schema": { "$ref": "#/entities/expenseRecord" },
-      "description": "Operating logistics, yard, and office expenses"
-    },
     "/purchases/{purchaseId}": {
       "schema": { "$ref": "#/entities/purchaseRecord" },
-      "description": "Manufacturer procurement orders and inward challans"
+      "description": "Manufacturer purchase vouchers and inward challans"
     },
-    "/account_heads/{headId}": {
-      "schema": { "$ref": "#/entities/accountHead" },
-      "description": "Chart of account heads for ledger classification"
-    },
-    "/journal_vouchers/{jvId}": {
-      "schema": { "$ref": "#/entities/journalEntry" },
-      "description": "Double-entry journal vouchers"
-    },
-    "/employees/{empId}": {
-      "schema": { "$ref": "#/entities/employee" },
-      "description": "Employee master roster records"
-    },
-    "/attendance_logs/{logId}": {
-      "schema": { "$ref": "#/entities/attendanceRecord" },
-      "description": "Daily employee attendance check-ins"
-    },
-    "/payroll_records/{recordId}": {
-      "schema": { "$ref": "#/entities/payrollRecord" },
-      "description": "Monthly employee payroll statements"
-    },
-    "/leave_requests/{requestId}": {
-      "schema": { "$ref": "#/entities/leaveRequest" },
-      "description": "Staff leave applications and approvals"
+    "/settings/{settingId}": {
+      "schema": { "$ref": "#/entities/companySettings" },
+      "description": "Company configuration, GSTIN, and voucher numbering settings"
     }
   }
 }

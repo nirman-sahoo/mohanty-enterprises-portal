@@ -1,637 +1,641 @@
-import React, { useState } from 'react';
-import { 
-  BarChart3, 
-  Download, 
-  Calendar, 
-  Filter, 
-  ArrowDownLeft, 
-  Wallet, 
-  Building2, 
-  CreditCard, 
-  FileText, 
-  IndianRupee, 
-  Bookmark, 
-  Clock, 
-  Package, 
-  Box, 
-  CalendarDays, 
-  Plus, 
-  ChevronDown, 
-  TrendingUp,
-  AlertTriangle,
-  CheckCircle2,
-  Boxes,
-  ArrowRight
+import React, { useMemo, useState } from 'react';
+import {
+  ArrowUpRight,
+  Plus,
+  ShoppingBag,
+  FileText,
+  ArrowDownLeft,
+  ArrowLeftRight,
+  Send,
 } from 'lucide-react';
-import { InventoryItem, SaleRecord, CustomerLedger, PurchaseRecord, ExpenseRecord, BankAccount } from '../types';
-import { formatINR } from '../data/inventoryData';
+import {
+  BankAccount,
+  ContraEntry,
+  CustomerLedger,
+  InventoryItem,
+  MoneyReceipt,
+  PaymentVoucher,
+  PurchaseRecord,
+  SaleRecord,
+} from '../types';
+import { formatINR } from '../utils/formatters';
+import {
+  computeAllAccountBalances,
+  computeFinancialSummary,
+  getPurchaseLiveStatus,
+  isCashAccount,
+} from '../utils/accountingEngine';
+import { NavTab } from './Sidebar';
 
 interface DashboardViewProps {
   inventory: InventoryItem[];
   sales: SaleRecord[];
-  ledgers?: CustomerLedger[];
-  purchases?: PurchaseRecord[];
-  expenses?: ExpenseRecord[];
-  bankAccounts?: BankAccount[];
-  onOpenRecordSale: () => void;
+  ledgers: CustomerLedger[];
+  purchases: PurchaseRecord[];
+  moneyReceipts: MoneyReceipt[];
+  paymentVouchers: PaymentVoucher[];
+  bankAccounts: BankAccount[];
+  contraEntries: ContraEntry[];
   onViewInvoice: (sale: SaleRecord) => void;
-  onNavigateToTab: (tab: any) => void;
+  onNavigateToTab: (tab: NavTab) => void;
+  onOpenReceivePayment?: () => void;
+  onOpenPaySupplier?: () => void;
+}
+
+function formatCompactINR(val: number): string {
+  if (val <= 0) return '₹0';
+  if (val >= 10000000) return `₹${(val / 10000000).toFixed(1)}Cr`;
+  if (val >= 100000) return `₹${(val / 100000).toFixed(1)}L`;
+  if (val >= 1000) return `₹${(val / 1000).toFixed(0)}K`;
+  return `₹${Math.round(val)}`;
+}
+
+function formatShortDateLabel(isoDate: string): string {
+  const parts = isoDate.split('-');
+  if (parts.length !== 3) return isoDate;
+  const parsed = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+  if (Number.isNaN(parsed.getTime())) return isoDate;
+  return new Intl.DateTimeFormat('en-IN', { day: '2-digit', month: 'short' }).format(parsed);
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
   inventory,
   sales,
-  ledgers = [],
-  purchases = [],
-  expenses = [],
-  bankAccounts = [],
-  onOpenRecordSale,
+  ledgers,
+  purchases,
+  moneyReceipts,
+  paymentVouchers,
+  bankAccounts,
+  contraEntries,
   onViewInvoice,
   onNavigateToTab,
+  onOpenReceivePayment,
+  onOpenPaySupplier,
 }) => {
-  const [salesAnalyticsTab, setSalesAnalyticsTab] = useState<'item' | 'quantity'>('item');
-  const [dateFilter, setDateFilter] = useState<'Today' | 'Last 7 Days' | 'Last 30 Days' | 'All Time'>('Last 30 Days');
-  const [inflowFilter, setInflowFilter] = useState<'Today' | 'This Month' | 'All Time'>('Today');
-  const [managementFilter, setManagementFilter] = useState<'Today' | 'This Month' | 'All Time'>('Today');
-  const [expiryFilter, setExpiryFilter] = useState<'30' | '60' | '90'>('30');
+  const [hoveredDate, setHoveredDate] = useState<string | null>(null);
 
-  // Filter sales according to dateFilter
-  const todayStr = new Date().toISOString().split('T')[0];
-
-  // Cash & Bank Collections from actual transactions or bank accounts
-  const totalCashBalance = bankAccounts.length > 0
-    ? bankAccounts
-        .filter(b => b.accountType === 'Cash Drawer' || b.bankName.toLowerCase().includes('cash'))
-        .reduce((sum, b) => sum + (b.currentBalance || 0), 0)
-    : sales
-        .filter((s) => s.paymentStatus === 'Paid' && (s.paymentMode === 'Cash' || (s.paymentMode && s.paymentMode.toLowerCase().includes('cash'))))
-        .reduce((sum, s) => sum + s.totalAmount, 0);
-
-  const totalBankBalance = bankAccounts.length > 0
-    ? bankAccounts
-        .filter(b => b.accountType !== 'Cash Drawer' && !b.bankName.toLowerCase().includes('cash'))
-        .reduce((sum, b) => sum + (b.currentBalance || 0), 0)
-    : sales
-        .filter((s) => s.paymentStatus === 'Paid' && (s.paymentMode !== 'Cash' && (!s.paymentMode || !s.paymentMode.toLowerCase().includes('cash'))))
-        .reduce((sum, s) => sum + s.totalAmount, 0);
-
-  const totalCashCollected = sales
-    .filter((s) => s.paymentStatus === 'Paid' && (s.paymentMode === 'Cash' || (s.paymentMode && s.paymentMode.toLowerCase().includes('cash'))))
-    .reduce((sum, s) => sum + s.totalAmount, 0);
-
-  const totalBankCollection = sales
-    .filter((s) => s.paymentStatus === 'Paid' && (s.paymentMode !== 'Cash' && (!s.paymentMode || !s.paymentMode.toLowerCase().includes('cash'))))
-    .reduce((sum, s) => sum + s.totalAmount, 0);
-
-  // Receivables from live Customer Ledgers
-  const expectedReceivable = ledgers.reduce(
-    (sum, l) => sum + (l.outstandingReceivable || 0),
-    0
-  );
-  const invoiceReceivableCount = sales.filter(
-    (s) => s.paymentStatus === 'Credit' || s.paymentStatus === 'Partial'
-  ).length;
-
-  // Live Bills Payable calculated from purchases in Firestore
-  const pendingPurchases = purchases.filter(
-    (p) => p.paymentStatus === 'Pending' || p.paymentStatus === 'Partial'
-  );
-  const billsPayableCount = pendingPurchases.length;
-  const expectedPayable = pendingPurchases.reduce((sum, p) => sum + (p.totalAmount || 0), 0);
-
-  // Low Stock Items
-  const lowStockItems = inventory.filter(
-    (item) => item.isCriticalLow || item.stockLevel <= item.reorderLevel
+  const financialSummary = useMemo(
+    () =>
+      computeFinancialSummary({
+        sales,
+        purchases,
+        inventory,
+        ledgers,
+        paymentVouchers,
+        moneyReceipts,
+        accounts: bankAccounts,
+        contraEntries,
+      }),
+    [sales, purchases, inventory, ledgers, paymentVouchers, moneyReceipts, bankAccounts, contraEntries]
   );
 
-  // Perishable batch items from real purchases
-  const cementExpiryAlerts = purchases
-    .filter(p => p.challanNo || p.truckNumber || p.category === 'CEMENT')
-    .map(p => {
-      const pDate = new Date(p.date || todayStr);
-      const expDate = new Date(pDate.getTime() + 90 * 24 * 60 * 60 * 1000);
-      const now = new Date();
-      const diffTime = expDate.getTime() - now.getTime();
-      const daysRemaining = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
-      const firstItem = p.items && p.items.length > 0 ? p.items[0] : null;
-      const itemName = firstItem ? firstItem.itemName : `${p.category} Stock Batch`;
-      const qtyStr = firstItem ? `${firstItem.quantity} ${firstItem.unit}` : 'Consignment Lot';
+  const accountBalances = useMemo(
+    () =>
+      computeAllAccountBalances({
+        accounts: bankAccounts,
+        sales,
+        moneyReceipts,
+        purchases,
+        paymentVouchers,
+        contraEntries,
+      }),
+    [bankAccounts, sales, moneyReceipts, purchases, paymentVouchers, contraEntries]
+  );
+
+  const unpaidPurchaseCount = useMemo(
+    () => purchases.filter((po) => getPurchaseLiveStatus(po, paymentVouchers).balanceDue > 0.5).length,
+    [purchases, paymentVouchers]
+  );
+
+  const duePartyCount = useMemo(
+    () => ledgers.filter((l) => (l.outstandingReceivable || 0) > 0.5).length,
+    [ledgers]
+  );
+
+  const lowStockCount = useMemo(
+    () => inventory.filter((item) => item.stockLevel <= item.reorderLevel).length,
+    [inventory]
+  );
+
+  const dailyActivity = useMemo(() => {
+    const map = new Map<string, { date: string; sales: number; purchases: number }>();
+
+    sales.forEach((s) => {
+      if (!s.date || s.status === 'Cancelled') return;
+      const cur = map.get(s.date) || { date: s.date, sales: 0, purchases: 0 };
+      cur.sales += s.totalAmount || 0;
+      map.set(s.date, cur);
+    });
+
+    purchases.forEach((p) => {
+      if (!p.date) return;
+      const cur = map.get(p.date) || { date: p.date, sales: 0, purchases: 0 };
+      cur.purchases += p.totalAmount || 0;
+      map.set(p.date, cur);
+    });
+
+    const sorted = Array.from(map.values())
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .slice(-7);
+
+    const maxVal = sorted.reduce((m, d) => Math.max(m, d.sales, d.purchases), 0) || 0;
+    return { rows: sorted, maxVal };
+  }, [sales, purchases]);
+
+  const activeDayPreview = useMemo(() => {
+    if (dailyActivity.rows.length === 0) return null;
+    if (hoveredDate) {
+      return dailyActivity.rows.find((r) => r.date === hoveredDate) || null;
+    }
+    return dailyActivity.rows[dailyActivity.rows.length - 1];
+  }, [dailyActivity.rows, hoveredDate]);
+
+  const recentVouchers = useMemo(() => {
+    const extractTs = (rawId: string) => {
+      const m = rawId.match(/(\d{10,})$/);
+      return m ? Number(m[1]) : 0;
+    };
+
+    const saleRows = sales.map((s) => ({
+      id: `s-${s.id}`,
+      sortTs: extractTs(s.id),
+      date: s.date || '',
+      voucherNo: s.invoiceNo || s.orderNo,
+      party: s.customerName,
+      type: 'Sale' as const,
+      status: s.paymentStatus,
+      amount: s.totalAmount,
+      saleRecord: s,
+    }));
+
+    const purchaseRows = purchases.map((p) => {
+      const live = getPurchaseLiveStatus(p, paymentVouchers);
       return {
-        id: p.id,
-        batch: p.challanNo || `LOT-${p.purchaseNo}`,
-        name: itemName,
-        mfgDate: p.date,
-        expiryDate: expDate.toISOString().split('T')[0],
-        daysRemaining,
-        stockQuantity: qtyStr,
-        location: 'Yard Shed 1'
+        id: `p-${p.id}`,
+        sortTs: extractTs(p.id),
+        date: p.date || '',
+        voucherNo: p.purchaseNo,
+        party: p.supplierName,
+        type: 'Purchase' as const,
+        status: live.status,
+        amount: p.totalAmount,
+        saleRecord: undefined,
       };
     });
 
-  // Top Sales Items aggregation
-  const itemSalesMap = sales.reduce((acc, sale) => {
-    if (sale.items && sale.items.length > 0) {
-      sale.items.forEach((item) => {
-        const desc = item.itemDescription || 'Material Item';
-        if (!acc[desc]) {
-          acc[desc] = { quantity: 0, revenue: 0, unit: item.unit };
-        }
-        acc[desc].quantity += item.quantity || 0;
-        acc[desc].revenue += item.amount || 0;
-      });
-    } else if (sale.itemDescription) {
-      const desc = sale.itemDescription;
-      if (!acc[desc]) {
-        acc[desc] = { quantity: 0, revenue: 0, unit: sale.unit };
-      }
-      acc[desc].quantity += sale.quantity || 0;
-      acc[desc].revenue += sale.totalAmount || 0;
-    }
-    return acc;
-  }, {} as Record<string, { quantity: number; revenue: number; unit: string }>);
+    return [...saleRows, ...purchaseRows]
+      .sort((a, b) => {
+        const cmp = (b.date || '').localeCompare(a.date || '');
+        if (cmp !== 0) return cmp;
+        return b.sortTs - a.sortTs;
+      })
+      .slice(0, 7);
+  }, [sales, purchases, paymentVouchers]);
 
-  const topItemsList = Object.entries(itemSalesMap)
-    .map(([name, data]) => ({ name, ...data }))
-    .sort((a, b) => (salesAnalyticsTab === 'item' ? b.revenue - a.revenue : b.quantity - a.quantity))
-    .slice(0, 5);
+  const corporateBanksCount = bankAccounts.filter((a) => !isCashAccount(a)).length;
 
-  // Export Report Handler
-  const handleDownloadReport = () => {
-    const headers = ['Order No', 'Customer Name', 'Date', 'Category', 'Total Amount (₹)', 'Payment Status'];
-    const rows = sales.map((s) => [
-      `"${s.orderNo || s.id}"`,
-      `"${s.customerName || 'Direct Customer'}"`,
-      s.date,
-      `"${s.category}"`,
-      s.totalAmount,
-      `"${s.paymentStatus}"`,
-    ]);
-
-    const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `Mohanty_Enterprises_Analytics_Report_${todayStr}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
+  const todayFormatted = new Intl.DateTimeFormat('en-IN', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  }).format(new Date());
 
   return (
-    <div className="space-y-6 relative pb-10">
-      {/* Top Breadcrumb & Control Action Bar matching overview.jpeg */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200/80">
-        <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-xl bg-white border border-slate-200/80 shadow-2xs flex items-center justify-center text-slate-800 shrink-0">
-            <BarChart3 className="w-5 h-5 text-slate-800" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold text-slate-900 tracking-tight">
-              Reports & Analytics
-            </h1>
-            <p className="text-xs text-slate-500 font-medium">
-              Dashboard <span className="mx-1">&gt;</span> Overview & Operational Pulse
-            </p>
-          </div>
+    <div className="space-y-6 pb-8 max-w-7xl mx-auto">
+      {/* Executive Header */}
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Overview</h1>
+          <p className="text-xs text-slate-500 mt-1">
+            {todayFormatted} · {sales.length} {sales.length === 1 ? 'Sale' : 'Sales'} · {purchases.length}{' '}
+            {purchases.length === 1 ? 'Purchase' : 'Purchases'}
+          </p>
         </div>
 
-        {/* Right Actions: Filter Dropdown & Download Button */}
-        <div className="flex items-center gap-3">
-          {/* Date Filter Dropdown */}
-          <div className="relative">
-            <select
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value as any)}
-              className="flex items-center gap-2 px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-lg border border-slate-200/90 shadow-2xs transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-amber-400"
-            >
-              <option value="Today">Today</option>
-              <option value="Last 7 Days">Last 7 Days</option>
-              <option value="Last 30 Days">Last 30 Days</option>
-              <option value="All Time">All Time (FY 2026-27)</option>
-            </select>
-          </div>
-
-          {/* Download Report Button in Golden Yellow #F6B118 */}
+        <div className="flex items-center gap-2.5 shrink-0">
           <button
-            onClick={handleDownloadReport}
-            className="flex items-center gap-2 px-4 py-2 bg-[#F6B118] hover:bg-[#E5A010] active:scale-[0.99] text-slate-950 text-xs font-bold rounded-lg shadow-sm transition-all cursor-pointer"
+            type="button"
+            onClick={() => onNavigateToTab('purchase-voucher')}
+            className="flex items-center gap-1.5 px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-lg border border-slate-200 transition-colors cursor-pointer whitespace-nowrap shrink-0"
           >
-            <Download className="w-3.5 h-3.5 text-slate-950 stroke-[2.4]" />
-            <span>Download Report</span>
+            <ShoppingBag className="w-3.5 h-3.5 text-slate-500" />
+            <span>Purchase Voucher</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => onNavigateToTab('sales-voucher')}
+            className="flex items-center gap-1.5 px-4 py-2 bg-[#F6B118] hover:bg-[#E5A010] text-slate-950 text-xs font-bold rounded-lg transition-colors cursor-pointer whitespace-nowrap shrink-0"
+          >
+            <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+            <span>Sales Voucher</span>
           </button>
         </div>
       </div>
 
-      {/* ROW 1: Revenue Inflow & Revenue Management */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* CARD 1: Revenue Inflow */}
-        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-5 sm:p-6 transition-all hover:shadow-sm">
-          {/* Header */}
-          <div className="flex items-center justify-between mb-5">
-            <div className="flex items-center gap-2">
-              <span className="w-1.5 h-4 bg-[#F6B118] rounded-full inline-block" />
-              <h2 className="text-sm font-bold text-slate-900 tracking-tight">
-                Revenue Inflow
-              </h2>
-            </div>
-            <select
-              value={inflowFilter}
-              onChange={(e) => setInflowFilter(e.target.value as any)}
-              className="px-2.5 py-1 text-xs font-medium text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors cursor-pointer focus:outline-none"
-            >
-              <option value="Today">Today</option>
-              <option value="This Month">This Month</option>
-              <option value="All Time">All Time</option>
-            </select>
+      {/* Unified Single-Strip KPI Overview */}
+      <div className="bg-white rounded-2xl border border-slate-200/90 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-slate-200/70 overflow-hidden">
+        <button
+          type="button"
+          onClick={() => onNavigateToTab('bank-book')}
+          className="p-5 sm:p-6 hover:bg-slate-50/70 transition-colors text-left cursor-pointer group"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-slate-500">Cash &amp; Bank</span>
+            <ArrowUpRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-600 transition-colors" />
           </div>
+          <p className="text-2xl font-bold font-mono tabular-nums text-slate-950 mt-2 truncate">
+            {formatINR(financialSummary.totalLiquidity)}
+          </p>
+          <p className="text-[11px] text-slate-400 font-mono tabular-nums mt-1.5 truncate">
+            Cash {formatINR(financialSummary.cashClosingBalance)} · Bank {formatINR(financialSummary.bankClosingBalance)}
+          </p>
+        </button>
 
-          {/* 2x2 Grid of Inflow Metrics */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* Tile 1: Cash Collected (Blue) */}
-            <div 
-              onClick={() => onNavigateToTab('banking')}
-              className="bg-blue-50/60 hover:bg-blue-50 border border-blue-100/70 rounded-xl p-3.5 flex items-center gap-3.5 cursor-pointer transition-all hover:shadow-sm group"
-              title="Click to view Banking & Cash Drawer"
-            >
-              <div className="w-11 h-11 rounded-xl bg-white text-blue-600 flex items-center justify-center shadow-2xs shrink-0 border border-blue-100/50 group-hover:scale-105 transition-transform">
-                <ArrowDownLeft className="w-5 h-5 stroke-[2.2]" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-base sm:text-lg font-black text-slate-900 tracking-tight truncate">
-                  {formatINR(totalCashCollected)}
-                </p>
-                <p className="text-[11px] text-slate-500 font-medium truncate mt-0.5">
-                  Total Cash Collected
-                </p>
-              </div>
-            </div>
-
-            {/* Tile 2: Cash Balance (Purple) */}
-            <div 
-              onClick={() => onNavigateToTab('banking')}
-              className="bg-purple-50/60 hover:bg-purple-50 border border-purple-100/70 rounded-xl p-3.5 flex items-center gap-3.5 cursor-pointer transition-all hover:shadow-sm group"
-              title="Click to view Safe Drawer Petty Cash"
-            >
-              <div className="w-11 h-11 rounded-xl bg-white text-purple-600 flex items-center justify-center shadow-2xs shrink-0 border border-purple-100/50 group-hover:scale-105 transition-transform">
-                <Wallet className="w-5 h-5 stroke-[2.2]" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-base sm:text-lg font-black text-slate-900 tracking-tight truncate">
-                  {formatINR(totalCashBalance)}
-                </p>
-                <p className="text-[11px] text-slate-500 font-medium truncate mt-0.5">
-                  Total Cash Balance (As on)
-                </p>
-              </div>
-            </div>
-
-            {/* Tile 3: Collection In Bank (Orange) */}
-            <div 
-              onClick={() => onNavigateToTab('banking')}
-              className="bg-orange-50/60 hover:bg-orange-50 border border-orange-100/70 rounded-xl p-3.5 flex items-center gap-3.5 cursor-pointer transition-all hover:shadow-sm group"
-              title="Click to view Bank Collections"
-            >
-              <div className="w-11 h-11 rounded-xl bg-white text-orange-600 flex items-center justify-center shadow-2xs shrink-0 border border-orange-100/50 group-hover:scale-105 transition-transform">
-                <Building2 className="w-5 h-5 stroke-[2.2]" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-base sm:text-lg font-black text-slate-900 tracking-tight truncate">
-                  {formatINR(totalBankCollection)}
-                </p>
-                <p className="text-[11px] text-slate-500 font-medium truncate mt-0.5">
-                  Total Collection In Bank
-                </p>
-              </div>
-            </div>
-
-            {/* Tile 4: Bank Balance (Pink) */}
-            <div 
-              onClick={() => onNavigateToTab('banking')}
-              className="bg-pink-50/60 hover:bg-pink-50 border border-pink-100/70 rounded-xl p-3.5 flex items-center gap-3.5 cursor-pointer transition-all hover:shadow-sm group"
-              title="Click to view SBI & HDFC accounts"
-            >
-              <div className="w-11 h-11 rounded-xl bg-white text-pink-600 flex items-center justify-center shadow-2xs shrink-0 border border-pink-100/50 group-hover:scale-105 transition-transform">
-                <CreditCard className="w-5 h-5 stroke-[2.2]" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-base sm:text-lg font-black text-slate-900 tracking-tight truncate">
-                  {formatINR(totalBankBalance)}
-                </p>
-                <p className="text-[11px] text-slate-500 font-medium truncate mt-0.5">
-                  Total Bank Balance (As on)
-                </p>
-              </div>
-            </div>
+        <button
+          type="button"
+          onClick={() => onNavigateToTab('party-outstandings')}
+          className="p-5 sm:p-6 hover:bg-slate-50/70 transition-colors text-left cursor-pointer group"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-slate-500">Party Receivables</span>
+            <ArrowUpRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-600 transition-colors" />
           </div>
-        </div>
+          <p className="text-2xl font-bold font-mono tabular-nums text-slate-950 mt-2 truncate">
+            {formatINR(financialSummary.totalReceivables)}
+          </p>
+          <p className="text-[11px] text-slate-400 mt-1.5 truncate">
+            {duePartyCount === 0
+              ? 'All party accounts settled'
+              : `${duePartyCount} ${duePartyCount === 1 ? 'party' : 'parties'} pending`}
+          </p>
+        </button>
 
-        {/* CARD 2: Revenue Management */}
-        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-5 sm:p-6 transition-all hover:shadow-sm">
-          {/* Header */}
-          <div className="flex items-center justify-between mb-5">
-            <div className="flex items-center gap-2">
-              <span className="w-1.5 h-4 bg-[#F6B118] rounded-full inline-block" />
-              <h2 className="text-sm font-bold text-slate-900 tracking-tight">
-                Revenue Management
-              </h2>
-            </div>
-            <select
-              value={managementFilter}
-              onChange={(e) => setManagementFilter(e.target.value as any)}
-              className="px-2.5 py-1 text-xs font-medium text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors cursor-pointer focus:outline-none"
-            >
-              <option value="Today">Today</option>
-              <option value="This Month">This Month</option>
-              <option value="All Time">All Time</option>
-            </select>
+        <button
+          type="button"
+          onClick={() => onNavigateToTab('payables')}
+          className="p-5 sm:p-6 hover:bg-slate-50/70 transition-colors text-left cursor-pointer group"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-slate-500">Supplier Payables</span>
+            <ArrowUpRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-600 transition-colors" />
           </div>
+          <p className="text-2xl font-bold font-mono tabular-nums text-slate-950 mt-2 truncate">
+            {formatINR(financialSummary.totalPayables)}
+          </p>
+          <p className="text-[11px] text-slate-400 mt-1.5 truncate">
+            {unpaidPurchaseCount === 0
+              ? 'No unpaid supplier bills'
+              : `${unpaidPurchaseCount} unpaid ${unpaidPurchaseCount === 1 ? 'bill' : 'bills'}`}
+          </p>
+        </button>
 
-          {/* 2x2 Grid of Management Metrics */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* Tile 1: Invoice Receivable (Peach/Orange) */}
-            <div 
-              onClick={() => onNavigateToTab('invoices')}
-              className="bg-orange-50/50 hover:bg-orange-50 border border-orange-100/70 rounded-xl p-3.5 flex items-center gap-3.5 cursor-pointer transition-all hover:shadow-sm group"
-              title="Click to view pending invoices"
-            >
-              <div className="w-11 h-11 rounded-xl bg-white text-orange-600 flex items-center justify-center shadow-2xs shrink-0 border border-orange-100/50 group-hover:scale-105 transition-transform">
-                <FileText className="w-5 h-5 stroke-[2.2]" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-base sm:text-lg font-black text-slate-900 tracking-tight truncate">
-                  {invoiceReceivableCount}
-                </p>
-                <p className="text-[11px] text-slate-500 font-medium truncate mt-0.5">
-                  Invoice Receivable
-                </p>
-              </div>
-            </div>
-
-            {/* Tile 2: Expected Receivable (Emerald) */}
-            <div 
-              onClick={() => onNavigateToTab('ledger')}
-              className="bg-emerald-50/60 hover:bg-emerald-50 border border-emerald-100/70 rounded-xl p-3.5 flex items-center gap-3.5 cursor-pointer transition-all hover:shadow-sm group"
-              title="Click to view Khatabook party ledgers"
-            >
-              <div className="w-11 h-11 rounded-xl bg-white text-emerald-600 flex items-center justify-center shadow-2xs shrink-0 border border-emerald-100/50 group-hover:scale-105 transition-transform">
-                <IndianRupee className="w-5 h-5 stroke-[2.2]" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-base sm:text-lg font-black text-emerald-600 tracking-tight truncate">
-                  {formatINR(expectedReceivable)}
-                </p>
-                <p className="text-[11px] text-slate-500 font-medium truncate mt-0.5">
-                  Expected Receivable
-                </p>
-              </div>
-            </div>
-
-            {/* Tile 3: Bills Payable (Amber) */}
-            <div 
-              onClick={() => onNavigateToTab('purchase')}
-              className="bg-amber-50/50 hover:bg-amber-50 border border-amber-100/70 rounded-xl p-3.5 flex items-center gap-3.5 cursor-pointer transition-all hover:shadow-sm group"
-              title="Click to view procurement bills payable"
-            >
-              <div className="w-11 h-11 rounded-xl bg-white text-amber-600 flex items-center justify-center shadow-2xs shrink-0 border border-amber-100/50 group-hover:scale-105 transition-transform">
-                <Bookmark className="w-5 h-5 stroke-[2.2]" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-base sm:text-lg font-black text-slate-900 tracking-tight truncate">
-                  {billsPayableCount}
-                </p>
-                <p className="text-[11px] text-slate-500 font-medium truncate mt-0.5">
-                  Bills Payable
-                </p>
-              </div>
-            </div>
-
-            {/* Tile 4: Expected Payable (Rose) */}
-            <div 
-              onClick={() => onNavigateToTab('purchase')}
-              className="bg-rose-50/60 hover:bg-rose-50 border border-rose-100/70 rounded-xl p-3.5 flex items-center gap-3.5 cursor-pointer transition-all hover:shadow-sm group"
-              title="Click to view supplier dues"
-            >
-              <div className="w-11 h-11 rounded-xl bg-white text-rose-600 flex items-center justify-center shadow-2xs shrink-0 border border-rose-100/50 group-hover:scale-105 transition-transform">
-                <Clock className="w-5 h-5 stroke-[2.2]" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-base sm:text-lg font-black text-slate-900 tracking-tight truncate">
-                  {formatINR(expectedPayable)}
-                </p>
-                <p className="text-[11px] text-slate-500 font-medium truncate mt-0.5">
-                  Expected Payable
-                </p>
-              </div>
-            </div>
+        <button
+          type="button"
+          onClick={() => onNavigateToTab('stock-report')}
+          className="p-5 sm:p-6 hover:bg-slate-50/70 transition-colors text-left cursor-pointer group"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-slate-500">Closing Stock Value</span>
+            <ArrowUpRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-600 transition-colors" />
           </div>
-        </div>
+          <p className="text-2xl font-bold font-mono tabular-nums text-slate-950 mt-2 truncate">
+            {formatINR(financialSummary.closingStockValue)}
+          </p>
+          <p className="text-[11px] text-slate-400 mt-1.5 truncate">
+            {inventory.length === 0
+              ? 'No SKUs in catalog'
+              : `${inventory.length} ${inventory.length === 1 ? 'SKU' : 'SKUs'} · ${lowStockCount} below reorder`}
+          </p>
+        </button>
       </div>
 
-      {/* ROW 2: Sale Analytics & Low Stock Items */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* CARD 3: Sale Analytics */}
-        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-5 sm:p-6 transition-all hover:shadow-sm">
-          {/* Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-            <div className="flex items-center gap-2">
-              <span className="w-1.5 h-4 bg-[#F6B118] rounded-full inline-block" />
-              <h2 className="text-sm font-bold text-slate-900 tracking-tight">
-                Sale Analytics
-              </h2>
+      {/* Main Content Split */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+        {/* Left 2/3: Trading Activity & Recent Vouchers */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* Trading & Cashflow Overview */}
+          <div className="bg-white rounded-2xl border border-slate-200/90 p-5 sm:p-6 space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h2 className="text-sm font-bold text-slate-900">Trading &amp; Cashflow</h2>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  {activeDayPreview
+                    ? `${formatShortDateLabel(activeDayPreview.date)} · Sales ${formatINR(activeDayPreview.sales)} · Purchases ${formatINR(activeDayPreview.purchases)}`
+                    : 'Non-GST sales, purchases, and operating cash collections'}
+                </p>
+              </div>
+              <div className="flex items-center gap-4 text-[11px] font-medium text-slate-500 shrink-0">
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-xs bg-slate-900 inline-block" />
+                  Sales
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-xs bg-[#F6B118] inline-block" />
+                  Purchases
+                </span>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <button 
-                onClick={() => onNavigateToTab('reports')}
-                className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors cursor-pointer"
+
+            {dailyActivity.rows.length > 0 && dailyActivity.maxVal > 0 ? (
+              <div className="relative pt-2 pb-1">
+                <div className="flex items-stretch gap-3 h-40">
+                  {/* Compact Y-Axis Scale */}
+                  <div className="flex flex-col justify-between text-[10px] font-mono tabular-nums text-slate-400 pb-6 pr-1 select-none text-right w-12 shrink-0">
+                    <span>{formatCompactINR(dailyActivity.maxVal)}</span>
+                    <span>{formatCompactINR(dailyActivity.maxVal / 2)}</span>
+                    <span>₹0</span>
+                  </div>
+
+                  {/* Bars & Dashed Gridlines */}
+                  <div className="flex-1 relative flex items-end gap-2 sm:gap-4 border-b border-slate-200 pb-6">
+                    <div className="absolute inset-x-0 top-0 border-t border-dashed border-slate-100 pointer-events-none" />
+                    <div className="absolute inset-x-0 top-1/2 -translate-y-3 border-t border-dashed border-slate-100 pointer-events-none" />
+
+                    {dailyActivity.rows.map((day) => {
+                      const salePct =
+                        day.sales > 0 ? Math.max(6, Math.round((day.sales / dailyActivity.maxVal) * 100)) : 0;
+                      const purPct =
+                        day.purchases > 0 ? Math.max(6, Math.round((day.purchases / dailyActivity.maxVal) * 100)) : 0;
+                      const isHovered = hoveredDate === day.date;
+
+                      return (
+                        <div
+                          key={day.date}
+                          onMouseEnter={() => setHoveredDate(day.date)}
+                          onMouseLeave={() => setHoveredDate(null)}
+                          className={`relative flex-1 flex flex-col items-center h-full justify-end min-w-0 rounded-t-lg transition-colors px-1 ${
+                            isHovered ? 'bg-slate-50/90' : ''
+                          }`}
+                        >
+                          <div className="w-full flex items-end justify-center gap-1.5 h-full">
+                            <div
+                              title={`Sales: ${formatINR(day.sales)}`}
+                              style={{ height: `${salePct}%` }}
+                              className="w-full max-w-[18px] bg-slate-900 rounded-t-sm transition-opacity"
+                            />
+                            <div
+                              title={`Purchases: ${formatINR(day.purchases)}`}
+                              style={{ height: `${purPct}%` }}
+                              className="w-full max-w-[18px] bg-[#F6B118] rounded-t-sm transition-opacity"
+                            />
+                          </div>
+                          <span className="absolute -bottom-5 text-[10px] font-mono text-slate-400 truncate">
+                            {formatShortDateLabel(day.date)}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="relative h-28 flex items-center justify-center border-y border-slate-100">
+                <div className="absolute inset-x-0 top-1/2 border-t border-dashed border-slate-200/70" />
+                <p className="relative bg-white px-4 text-xs text-slate-400">
+                  No daily sales or purchase activity yet — chart updates automatically as vouchers are posted.
+                </p>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1 border-t border-slate-100">
+              <div>
+                <p className="text-[11px] font-medium text-slate-500">Total Sales</p>
+                <p className="text-base font-bold font-mono tabular-nums text-slate-950 mt-0.5">
+                  {formatINR(financialSummary.grossSales)}
+                </p>
+              </div>
+              <div>
+                <p className="text-[11px] font-medium text-slate-500">Total Purchases</p>
+                <p className="text-base font-bold font-mono tabular-nums text-slate-950 mt-0.5">
+                  {formatINR(financialSummary.grossPurchases)}
+                </p>
+              </div>
+              <div>
+                <p className="text-[11px] font-medium text-slate-500">Gross Trading Profit</p>
+                <p
+                  className={`text-base font-bold font-mono tabular-nums mt-0.5 ${
+                    financialSummary.grossTradingProfit >= 0 ? 'text-emerald-700' : 'text-rose-700'
+                  }`}
+                >
+                  {formatINR(financialSummary.grossTradingProfit)}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Recent Vouchers Table */}
+          <div className="bg-white rounded-2xl border border-slate-200/90 overflow-hidden">
+            <div className="px-5 sm:px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h2 className="text-sm font-bold text-slate-900">Recent Vouchers</h2>
+                <p className="text-[11px] text-slate-400">Latest Sales &amp; Purchase bills</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => onNavigateToTab('sales-register')}
+                className="text-xs font-semibold text-slate-500 hover:text-slate-900 inline-flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0"
               >
-                <span>Full Register</span>
-                <ArrowRight className="w-3 h-3 text-slate-400" />
+                <span>Sales Register</span>
+                <ArrowUpRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {recentVouchers.length === 0 ? (
+              <div className="py-12 px-6 text-center">
+                <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-3">
+                  <FileText className="w-5 h-5" />
+                </div>
+                <p className="text-sm font-semibold text-slate-800">No vouchers posted yet</p>
+                <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+                  Record a Purchase Voucher to add inward stock or post a Sales Voucher to bill a party.
+                </p>
+                <div className="mt-5 flex items-center justify-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => onNavigateToTab('purchase-voucher')}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold rounded-lg cursor-pointer whitespace-nowrap shrink-0"
+                  >
+                    Record Purchase
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onNavigateToTab('sales-voucher')}
+                    className="px-4 py-2 bg-[#F6B118] hover:bg-[#E5A010] text-slate-950 text-xs font-bold rounded-lg cursor-pointer whitespace-nowrap shrink-0"
+                  >
+                    Create Sales Voucher
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-100 text-[11px] font-semibold text-slate-400 bg-slate-50/50">
+                      <th className="py-2.5 px-5">Date</th>
+                      <th className="py-2.5 px-3">Voucher</th>
+                      <th className="py-2.5 px-3">Party / Supplier</th>
+                      <th className="py-2.5 px-3">Status</th>
+                      <th className="py-2.5 px-5 text-right">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {recentVouchers.map((row) => (
+                      <tr
+                        key={row.id}
+                        onClick={() => {
+                          if (row.saleRecord) {
+                            onViewInvoice(row.saleRecord);
+                          } else {
+                            onNavigateToTab('purchase-register');
+                          }
+                        }}
+                        className="hover:bg-slate-50/80 transition-colors cursor-pointer"
+                      >
+                        <td className="py-2.5 px-5 font-mono text-slate-500 whitespace-nowrap">{row.date}</td>
+                        <td className="py-2.5 px-3 whitespace-nowrap">
+                          <span className="font-mono font-semibold text-slate-900">{row.voucherNo}</span>
+                          <span className="ml-1.5 text-[11px] text-slate-400">· {row.type}</span>
+                        </td>
+                        <td className="py-2.5 px-3 font-medium text-slate-800 max-w-[190px] truncate">{row.party}</td>
+                        <td className="py-2.5 px-3 whitespace-nowrap">
+                          <span
+                            className={`text-[11px] font-semibold ${
+                              row.status === 'Paid'
+                                ? 'text-emerald-700'
+                                : row.status === 'Partial'
+                                ? 'text-amber-700'
+                                : 'text-rose-700'
+                            }`}
+                          >
+                            {row.status}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-5 text-right font-mono font-semibold tabular-nums text-slate-900 whitespace-nowrap">
+                          {formatINR(row.amount)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Right 1/3: Accounts, Quick Actions & Financial Position */}
+        <div className="bg-white rounded-2xl border border-slate-200/90 divide-y divide-slate-100">
+          {/* Accounts List */}
+          <div className="p-5 sm:p-6 space-y-3.5">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-bold text-slate-900">Cash &amp; Bank Accounts</h2>
+              <button
+                type="button"
+                onClick={() => onNavigateToTab('settings')}
+                className="text-[11px] font-semibold text-amber-700 hover:text-amber-800 cursor-pointer whitespace-nowrap shrink-0"
+              >
+                {corporateBanksCount === 0 ? '+ Add Bank' : 'Manage'}
+              </button>
+            </div>
+
+            <div className="space-y-1.5 text-xs">
+              {bankAccounts.map((acc) => {
+                const bal = accountBalances[acc.id] ?? acc.openingBalance ?? 0;
+                return (
+                  <button
+                    key={acc.id}
+                    type="button"
+                    onClick={() => onNavigateToTab(isCashAccount(acc) ? 'cash-book' : 'bank-book')}
+                    className="w-full flex items-center justify-between py-2 px-2.5 -mx-2.5 rounded-lg hover:bg-slate-50 transition-colors text-left cursor-pointer"
+                  >
+                    <div className="min-w-0 pr-2">
+                      <p className="font-semibold text-slate-800 truncate">{acc.bankName}</p>
+                      <p className="text-[10px] font-mono text-slate-400">
+                        {isCashAccount(acc) ? 'Cash Book' : `A/C ${acc.accountNumber}`}
+                      </p>
+                    </div>
+                    <span className="font-mono font-bold tabular-nums text-slate-900 shrink-0">
+                      {formatINR(bal)}
+                    </span>
+                  </button>
+                );
+              })}
+
+              {corporateBanksCount === 0 && (
+                <p className="text-[11px] text-slate-400 pt-1">
+                  Add your corporate bank account in Settings to track Bank Book receipts &amp; payments.
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Quick Accounting Actions */}
+          <div className="p-5 sm:p-6 space-y-2.5">
+            <h3 className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Quick Actions</h3>
+            <div className="space-y-1.5 text-xs">
+              {onOpenReceivePayment && (
+                <button
+                  type="button"
+                  onClick={onOpenReceivePayment}
+                  className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-800 font-semibold transition-colors cursor-pointer"
+                >
+                  <span className="flex items-center gap-2">
+                    <ArrowDownLeft className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Receive Party Payment</span>
+                  </span>
+                  <ArrowUpRight className="w-3.5 h-3.5 text-slate-400" />
+                </button>
+              )}
+              {onOpenPaySupplier && (
+                <button
+                  type="button"
+                  onClick={onOpenPaySupplier}
+                  className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-800 font-semibold transition-colors cursor-pointer"
+                >
+                  <span className="flex items-center gap-2">
+                    <Send className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Pay Supplier Bill</span>
+                  </span>
+                  <ArrowUpRight className="w-3.5 h-3.5 text-slate-400" />
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => onNavigateToTab('contra-entry')}
+                className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-800 font-semibold transition-colors cursor-pointer"
+              >
+                <span className="flex items-center gap-2">
+                  <ArrowLeftRight className="w-3.5 h-3.5 text-slate-600" />
+                  <span>Contra Cash / Bank Transfer</span>
+                </span>
+                <ArrowUpRight className="w-3.5 h-3.5 text-slate-400" />
               </button>
             </div>
           </div>
 
-          {/* Sub-tabs: Top Sales Item | Top Sold Quantity */}
-          <div className="flex items-center border-b border-slate-100 mb-4">
-            <button
-              onClick={() => setSalesAnalyticsTab('item')}
-              className={`pb-2.5 px-4 text-xs font-bold transition-all cursor-pointer ${
-                salesAnalyticsTab === 'item'
-                  ? 'border-b-2 border-indigo-600 text-slate-900 font-extrabold'
-                  : 'text-slate-400 hover:text-slate-700'
-              }`}
-            >
-              Top Sales Value
-            </button>
-            <button
-              onClick={() => setSalesAnalyticsTab('quantity')}
-              className={`pb-2.5 px-4 text-xs font-bold transition-all cursor-pointer ${
-                salesAnalyticsTab === 'quantity'
-                  ? 'border-b-2 border-indigo-600 text-slate-900 font-extrabold'
-                  : 'text-slate-400 hover:text-slate-700'
-              }`}
-            >
-              Top Sold Quantity
-            </button>
-          </div>
-
-          {/* Content */}
-          <div className="min-h-[160px] flex items-center justify-center">
-            {topItemsList.length > 0 ? (
-              <div className="w-full space-y-2.5">
-                {topItemsList.map((item, idx) => (
-                  <div key={idx} className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100 text-xs hover:bg-slate-100/70 transition-colors">
-                    <div className="flex items-center gap-2.5">
-                      <span className="w-5 h-5 rounded-full bg-slate-900 text-amber-400 font-bold flex items-center justify-center text-[10px]">
-                        {idx + 1}
-                      </span>
-                      <span className="font-bold text-slate-900">{item.name}</span>
-                    </div>
-                    <div className="text-right">
-                      <span className="font-bold text-slate-900">{formatINR(item.revenue)}</span>
-                      <span className="text-slate-400 text-[10px] ml-2">({item.quantity} {item.unit})</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-8 text-slate-400 text-xs">
-                <p>No sales records found</p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* CARD 4: Low Stock Items */}
-        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-5 sm:p-6 transition-all hover:shadow-sm">
-          {/* Header */}
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <span className="w-1.5 h-4 bg-rose-500 rounded-full inline-block" />
-              <h2 className="text-sm font-bold text-slate-900 tracking-tight">
-                Low Stock Items ({lowStockItems.length})
-              </h2>
+          {/* Financial Position Summary */}
+          <div className="p-5 sm:p-6 space-y-2.5 text-xs">
+            <h3 className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Position</h3>
+            <div className="flex items-center justify-between">
+              <span className="text-slate-500">Operating Inflows</span>
+              <span className="font-mono font-semibold tabular-nums text-emerald-700">
+                {formatINR(financialSummary.operatingInflows)}
+              </span>
             </div>
-            <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-200/50 shadow-2xs">
-              <Package className="w-4 h-4 stroke-[2.2]" />
+            <div className="flex items-center justify-between">
+              <span className="text-slate-500">Operating Outflows</span>
+              <span className="font-mono font-semibold tabular-nums text-rose-700">
+                {formatINR(financialSummary.operatingOutflows)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between pt-2.5 border-t border-slate-100">
+              <span className="font-semibold text-slate-700">Net Working Capital</span>
+              <span className="font-mono font-bold tabular-nums text-slate-950">
+                {formatINR(financialSummary.netWorkingCapital)}
+              </span>
             </div>
           </div>
-
-          {/* Content */}
-          <div className="min-h-[190px] flex items-center justify-center">
-            {lowStockItems.length > 0 ? (
-              <div className="w-full space-y-2">
-                {lowStockItems.slice(0, 4).map((item) => (
-                  <div key={item.id} className="flex items-center justify-between p-2.5 rounded-xl bg-amber-50/50 border border-amber-200/60 text-xs">
-                    <div>
-                      <p className="font-bold text-slate-900">{item.name}</p>
-                      <p className="text-[10px] text-amber-700 font-medium">Category: {item.category}</p>
-                    </div>
-                    <div className="text-right">
-                      <span className="font-bold text-rose-600">{item.stockLevel} {item.unit}</span>
-                      <span className="text-[10px] text-slate-400 block">Reorder: {item.reorderLevel}</span>
-                    </div>
-                  </div>
-                ))}
-                <button 
-                  onClick={() => onNavigateToTab('inventory')}
-                  className="w-full text-center text-xs text-amber-600 hover:text-amber-700 font-semibold pt-1 cursor-pointer flex items-center justify-center gap-1"
-                >
-                  <span>Open Item Master Inventory</span>
-                  <ArrowRight className="w-3 h-3" />
-                </button>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center py-6 text-center">
-                <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 mb-2 shadow-inner">
-                  <Box className="w-7 h-7 stroke-[1.5]" />
-                </div>
-                <p className="text-xs text-slate-400 font-medium">All material stock levels are adequate</p>
-              </div>
-            )}
-          </div>
         </div>
-      </div>
-
-      {/* ROW 3: Item Expiry & Freshness Details */}
-      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-5 sm:p-6 transition-all hover:shadow-sm">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <span className="w-1.5 h-4 bg-[#F6B118] rounded-full inline-block" />
-            <h2 className="text-sm font-bold text-slate-900 tracking-tight">
-              Material Freshness & Expiry Watch
-            </h2>
-          </div>
-          <select
-            value={expiryFilter}
-            onChange={(e) => setExpiryFilter(e.target.value as any)}
-            className="px-3 py-1 text-xs font-medium text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors cursor-pointer focus:outline-none"
-          >
-            <option value="30">Expiring in 30 Days</option>
-            <option value="60">Expiring in 60 Days</option>
-            <option value="90">Expiring in 90 Days</option>
-          </select>
-        </div>
-
-        {/* Content */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs">
-            <thead>
-              <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider text-[11px]">
-                <th className="py-2.5 px-3">Batch Code</th>
-                <th className="py-2.5 px-3">Material Description</th>
-                <th className="py-2.5 px-3">Manufacture Date</th>
-                <th className="py-2.5 px-3">Expiry Date</th>
-                <th className="py-2.5 px-3 text-right">Quantity</th>
-                <th className="py-2.5 px-3 text-center">Shelf Life Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {cementExpiryAlerts.filter(c => c.daysRemaining <= parseInt(expiryFilter)).length > 0 ? (
-                cementExpiryAlerts
-                  .filter(c => c.daysRemaining <= parseInt(expiryFilter))
-                  .map((batch) => (
-                    <tr key={batch.id} className="hover:bg-slate-50/75">
-                      <td className="py-2.5 px-3 font-mono font-bold text-slate-700">{batch.batch}</td>
-                      <td className="py-2.5 px-3 font-bold text-slate-900">{batch.name}</td>
-                      <td className="py-2.5 px-3 text-slate-500 font-mono">{batch.mfgDate}</td>
-                      <td className="py-2.5 px-3 text-slate-500 font-mono">{batch.expiryDate}</td>
-                      <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">{batch.stockQuantity}</td>
-                      <td className="py-2.5 px-3 text-center">
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                          batch.daysRemaining <= 30 ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
-                        }`}>
-                          {batch.daysRemaining} days left (Sell First)
-                        </span>
-                      </td>
-                    </tr>
-                  ))
-              ) : (
-                <tr>
-                  <td colSpan={6} className="py-8 text-center text-slate-400 text-xs">
-                    No active batch freshness alerts. Recorded procurement lots and delivery challans will appear here.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Subtle Construction Crane & Scaffolding Watermark in Bottom Right */}
-      <div className="pointer-events-none opacity-10 absolute bottom-0 right-0 w-80 h-48 overflow-hidden flex items-end justify-end">
-        <svg viewBox="0 0 300 180" className="w-full text-slate-900 fill-current">
-          <line x1="200" y1="180" x2="200" y2="20" stroke="currentColor" strokeWidth="3" />
-          <line x1="200" y1="20" x2="120" y2="20" stroke="currentColor" strokeWidth="2" />
-          <line x1="200" y1="20" x2="280" y2="20" stroke="currentColor" strokeWidth="2" />
-          <line x1="200" y1="50" x2="150" y2="20" stroke="currentColor" strokeWidth="1" />
-          <line x1="200" y1="50" x2="250" y2="20" stroke="currentColor" strokeWidth="1" />
-          <rect x="50" y="80" width="80" height="100" stroke="currentColor" strokeWidth="1.5" fill="none" />
-          <rect x="70" y="100" width="40" height="80" stroke="currentColor" strokeWidth="1" fill="none" />
-          <line x1="50" y1="120" x2="130" y2="120" stroke="currentColor" strokeWidth="1" />
-          <line x1="50" y1="150" x2="130" y2="150" stroke="currentColor" strokeWidth="1" />
-        </svg>
       </div>
     </div>
   );

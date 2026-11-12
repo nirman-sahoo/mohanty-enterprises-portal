@@ -2,6 +2,8 @@ export type Category = 'CEMENT' | 'SCAN TMT BAR' | 'FERTILIZER' | 'Asbestos';
 
 export type UnitType = 'Bags' | 'Tons' | 'Pcs' | 'CFT' | 'Bags/Bottles' | 'KG';
 
+export type SettlementChannel = 'Cash' | 'Bank' | 'Credit';
+
 export interface InventoryItem {
   id: string;
   name: string;
@@ -33,25 +35,30 @@ export interface SaleRecord {
   invoiceNo: string;
   orderNo: string;
   customerName: string;
+  customerGstin?: string;
   shipToAddress: string;
   customerPhone: string;
   date: string;
   time: string;
   items: OrderItem[];
-  // For backwards compatibility and fast table view
   category: Category;
   itemDescription: string;
   quantity: number;
   unit: UnitType;
   unitPrice: number;
-  
+
   subtotal: number;
   isGst: boolean;
+  gstRate?: number;
   gstAmount: number;
-  totalAmount: number; // Final payable
+  totalAmount: number;
   status: OrderStatus;
   paymentStatus: PaymentStatus;
-  paymentMode?: string;
+  paymentMode?: string; // 'Cash' | 'RTGS / NEFT' | 'UPI / QR' | 'Cheque / DD' | 'Credit'
+  paidAmount?: number;
+  bankAccountId?: string;
+  bankAccountName?: string;
+  paymentReference?: string;
   truckNumber?: string;
   notes?: string;
 }
@@ -66,10 +73,29 @@ export interface MoneyReceipt {
   amount: number;
   amountInWords: string;
   paymentMode: 'Cash' | 'RTGS / NEFT' | 'UPI / QR' | 'Cheque / DD';
+  bankAccountId?: string;
+  bankAccountName?: string;
   forAccount: string;
   paidAmount: number;
   dueAmount: number;
   referenceNo?: string;
+  remarks?: string;
+}
+
+export interface PaymentVoucher {
+  id: string;
+  voucherNo: string;
+  date: string;
+  supplierName: string;
+  supplierGst?: string;
+  purchaseId?: string;
+  purchaseNo?: string;
+  amount: number;
+  paymentMode: 'Cash' | 'RTGS / NEFT' | 'UPI / QR' | 'Cheque / DD';
+  bankAccountId: string;
+  bankAccountName: string;
+  referenceNo?: string;
+  remarks?: string;
 }
 
 export type VoucherType = 'Sales' | 'Pur' | 'Payment' | 'Discount';
@@ -78,11 +104,12 @@ export interface StatementEntry {
   id: string;
   date: string;
   voucherType: VoucherType;
+  voucherRefId?: string;
   details: string;
-  itemQty?: string; // Purchase & sales column qty wise
-  debit: number;    // Amount billed / material out
-  credit: number;   // Amount received / paid
-  balance: number;  // Running balance
+  itemQty?: string;
+  debit: number;
+  credit: number;
+  balance: number;
   balanceType: 'Dr' | 'Cr';
 }
 
@@ -110,89 +137,6 @@ export interface CustomerLedger {
   statementEntries: StatementEntry[];
 }
 
-export type Department = 'Accounts' | 'Sales' | 'HR' | 'Admin' | 'Warehouse / Yard' | 'Logistics';
-
-export type EmployeeStatus = 'Active' | 'On Leave' | 'Inactive';
-
-export interface Employee {
-  id: string;
-  empCode: string;
-  name: string;
-  department: Department;
-  designation: string;
-  phone: string;
-  email: string;
-  joiningDate: string;
-  monthlySalary: number; // in ₹
-  bankAccount: string;
-  bankIfsc: string;
-  panNo: string;
-  status: EmployeeStatus;
-}
-
-export type AttendanceStatus = 'Present' | 'Absent' | 'On Leave' | 'Half Day';
-
-export interface AttendanceRecord {
-  id: string;
-  employeeId: string;
-  employeeName: string;
-  department: Department;
-  date: string; // YYYY-MM-DD
-  status: AttendanceStatus;
-  checkInTime?: string;
-  checkOutTime?: string;
-  notes?: string;
-}
-
-export type LeaveType = 'Casual' | 'Sick' | 'Earned';
-export type LeaveStatus = 'Pending' | 'Approved' | 'Rejected';
-
-export interface LeaveRequest {
-  id: string;
-  employeeId: string;
-  employeeName: string;
-  department: Department;
-  leaveType: LeaveType;
-  startDate: string;
-  endDate: string;
-  days: number;
-  reason: string;
-  status: LeaveStatus;
-  appliedOn: string;
-}
-
-export interface PayrollRecord {
-  id: string;
-  month: string; // YYYY-MM
-  employeeId: string;
-  employeeName: string;
-  department: Department;
-  designation: string;
-  basicSalary: number;
-  allowances: number;
-  pfDeduction: number;
-  taxDeduction: number;
-  netSalary: number;
-  paymentStatus: 'Paid' | 'Processing' | 'Pending';
-  paymentDate?: string;
-  bankReference?: string;
-}
-
-export type HRSubTab = 'overview' | 'employee' | 'attendance' | 'payroll' | 'leave' | 'reports';
-
-export interface ExpenseRecord {
-  id: string;
-  expenseNo: string;
-  date: string;
-  category: 'Logistics & Diesel' | 'Yard Labour' | 'Vehicle Maintenance' | 'Utilities & Rent' | 'Loading & Unloading' | 'Office Tea & Snacks';
-  description: string;
-  amount: number;
-  paymentMode: 'Cash' | 'Bank Transfer (RTGS/NEFT)' | 'UPI' | 'Cheque';
-  paidTo: string;
-  approvedBy: string;
-  status: 'Approved' | 'Pending' | 'Rejected';
-}
-
 export interface PurchaseItem {
   itemId: string;
   itemName: string;
@@ -208,15 +152,25 @@ export interface PurchaseRecord {
   purchaseNo: string;
   supplierName: string;
   supplierGst: string;
+  supplierPhone?: string;
+  supplierAddress?: string;
   date: string;
   category: Category;
   items: PurchaseItem[];
   subtotal: number;
+  isGst?: boolean;
+  gstRate?: number;
   gstAmount: number;
   totalAmount: number;
   paymentStatus: 'Paid' | 'Pending' | 'Partial';
+  paymentMode?: 'Cash' | 'RTGS / NEFT' | 'UPI / QR' | 'Cheque / DD' | 'Credit';
+  paidAmount?: number;
+  bankAccountId?: string;
+  bankAccountName?: string;
+  paymentReference?: string;
   truckNumber: string;
   challanNo: string;
+  notes?: string;
 }
 
 export interface BankAccount {
@@ -226,6 +180,7 @@ export interface BankAccount {
   branch: string;
   ifsc: string;
   accountType: 'Current' | 'Cash Credit (CC)' | 'Cash Drawer';
+  openingBalance?: number;
   currentBalance: number;
   unclearedChequesCount: number;
   status: 'Active' | 'Reconciled';
@@ -235,30 +190,79 @@ export interface ContraEntry {
   id: string;
   voucherNo: string;
   date: string;
+  fromAccountId?: string;
   fromAccount: string;
+  toAccountId?: string;
   toAccount: string;
   amount: number;
   referenceNo: string;
   remarks: string;
 }
 
-export interface JournalEntry {
+export interface CompanySettings {
   id: string;
-  jvNo: string;
-  date: string;
-  debitAccount: string;
-  debitAmount: number;
-  creditAccount: string;
-  creditAmount: number;
-  narration: string;
-  authorizedBy: string;
+  companyName: string;
+  directorName: string;
+  designation: string;
+  tradeTagline: string;
+  slogan: string;
+  gstin: string;
+  pan: string;
+  email: string;
+  phone: string;
+  address: string;
+  invoicePrefix: string;
+  purchasePrefix: string;
+  receiptPrefix: string;
+  paymentPrefix: string;
+  contraPrefix: string;
+  defaultGstRate: number;
+  bankName: string;
+  bankAccount: string;
+  bankIfsc: string;
+  whatsappAlerts: boolean;
+  autoPrintEstimate: boolean;
+  roundOffInvoices: boolean;
 }
 
-export interface AccountHead {
+export type BookEntrySource =
+  | 'Sales Receipt'
+  | 'Money Receipt'
+  | 'Purchase Payment'
+  | 'Payment Voucher'
+  | 'Contra Deposit'
+  | 'Contra Withdrawal'
+  | 'Contra Transfer';
+
+export interface LedgerBookEntry {
   id: string;
-  code: string;
-  name: string;
-  group: 'Current Assets' | 'Fixed Assets' | 'Current Liabilities' | 'Direct Incomes' | 'Direct Expenses' | 'Indirect Expenses';
-  balance: number;
-  balanceType: 'Dr' | 'Cr';
+  sourceId: string;
+  sourceCollection: 'orders' | 'money_receipts' | 'purchases' | 'payment_vouchers' | 'contra_entries';
+  date: string;
+  voucherNo: string;
+  particulars: string;
+  voucherType: BookEntrySource;
+  accountId: string;
+  accountName: string;
+  paymentMode: string;
+  referenceNo?: string;
+  debit: number;  // Inward / Receipt
+  credit: number; // Outward / Payment
+  runningBalance: number;
+  canDeleteDirect?: boolean;
+}
+
+export interface SupplierPayableSummary {
+  supplierName: string;
+  supplierGst: string;
+  supplierPhone?: string;
+  totalPurchased: number;
+  totalPaid: number;
+  outstandingPayable: number;
+  billCount: number;
+  unpaidBillCount: number;
+  lastPurchaseDate: string;
+  lastPaymentDate: string;
+  purchases: PurchaseRecord[];
+  payments: PaymentVoucher[];
 }
