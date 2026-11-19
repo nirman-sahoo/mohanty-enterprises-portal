@@ -165,6 +165,7 @@
       "properties": {
         "purchaseNo": { "type": "string", "maxLength": 50 },
         "supplierName": { "type": "string", "maxLength": 150 },
+        "retailerName": { "type": "string", "maxLength": 150 },
         "supplierGst": { "type": "string", "maxLength": 30 },
         "supplierPhone": { "type": "string", "maxLength": 30 },
         "supplierAddress": { "type": "string", "maxLength": 250 },

@@ -6,6 +6,8 @@ import { Footer } from './components/Footer';
 import { DashboardView } from './components/DashboardView';
 import { SalesVoucherView } from './components/transactions/SalesVoucherView';
 import { PurchaseVoucherView } from './components/transactions/PurchaseVoucherView';
+import { ReceiptVoucherView } from './components/transactions/ReceiptVoucherView';
+import { PaymentVoucherView } from './components/transactions/PaymentVoucherView';
 import { BankBookView } from './components/banking/BankBookView';
 import { CashBookView } from './components/banking/CashBookView';
 import { ContraEntryView } from './components/banking/ContraEntryView';
@@ -292,6 +294,42 @@ export default function App() {
               />
             )}
 
+            {activeTab === 'receipt-voucher' && (
+              <ReceiptVoucherView
+                ledgers={ledgers}
+                moneyReceipts={moneyReceipts}
+                bankAccounts={bankAccounts}
+                sales={sales}
+                purchases={purchases}
+                paymentVouchers={paymentVouchers}
+                contraEntries={contraEntries}
+                settings={companySettings}
+                onSaveReceipt={handleSaveMoneyReceipt}
+                onDeleteReceipt={async (rcp) => {
+                  await deleteMoneyReceiptInDb(rcp, ledgers);
+                }}
+                onViewReceipt={(rcp) => setSelectedReceiptForModal(rcp)}
+                onGoToSalesVoucher={() => setActiveTab('sales-voucher')}
+              />
+            )}
+
+            {activeTab === 'payment-voucher' && (
+              <PaymentVoucherView
+                purchases={purchases}
+                paymentVouchers={paymentVouchers}
+                bankAccounts={bankAccounts}
+                sales={sales}
+                moneyReceipts={moneyReceipts}
+                contraEntries={contraEntries}
+                settings={companySettings}
+                onSavePaymentVoucher={savePaymentVoucherInDb}
+                onDeletePaymentVoucher={async (pv) => {
+                  await deletePaymentVoucherInDb(pv.id);
+                }}
+                onGoToPurchaseVoucher={() => setActiveTab('purchase-voucher')}
+              />
+            )}
+
             {/* BANKING GROUP */}
             {activeTab === 'bank-book' && (
               <BankBookView
@@ -471,6 +509,7 @@ export default function App() {
         isOpen={receiveModalConfig.isOpen}
         onClose={() => setReceiveModalConfig((prev) => ({ ...prev, isOpen: false }))}
         ledgers={ledgers}
+        sales={sales}
         bankAccounts={bankAccounts}
         initialParty={receiveModalConfig.party}
         defaultBookType={receiveModalConfig.bookType}

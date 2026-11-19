@@ -43,6 +43,8 @@ const TAB_LABELS: Record<NavTab, string> = {
   dashboard: 'Overview',
   'sales-voucher': 'Sales Voucher',
   'purchase-voucher': 'Purchase Voucher',
+  'receipt-voucher': 'Receipt Voucher',
+  'payment-voucher': 'Payment Voucher',
   'bank-book': 'Bank Book',
   'cash-book': 'Cash Book',
   'contra-entry': 'Contra Entry',

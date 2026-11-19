@@ -655,6 +655,7 @@ export function subscribeToPurchases(onData: (purchases: PurchaseRecord[]) => vo
           id: docSnap.id,
           purchaseNo: d.purchaseNo || '',
           supplierName: d.supplierName || '',
+          retailerName: d.retailerName || '',
           supplierGst: d.supplierGst || '',
           supplierPhone: d.supplierPhone || '',
           supplierAddress: d.supplierAddress || '',

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { X, ArrowUpRight, CheckCircle2 } from 'lucide-react';
 import { BankAccount, PaymentVoucher, PurchaseRecord, SupplierPayableSummary } from '../../types';
 import { formatINR } from '../../utils/formatters';
@@ -34,8 +34,13 @@ export const PaySupplierModal: React.FC<PaySupplierModalProps> = ({
   const cashAccount = bankAccounts.find((a) => isCashAccount(a));
   const bankOnlyAccounts = bankAccounts.filter((a) => !isCashAccount(a));
 
+  // Strictly restrict suppliers to parties for whom a Purchase entry exists
+  const eligiblePayables = useMemo(
+    () => payables.filter((p) => p.billCount > 0),
+    [payables]
+  );
+
   const [selectedSupplierName, setSelectedSupplierName] = useState<string>('');
-  const [customSupplierName, setCustomSupplierName] = useState<string>('');
   const [selectedPurchaseId, setSelectedPurchaseId] = useState<string>('');
   const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [amount, setAmount] = useState<string>('');
@@ -50,12 +55,20 @@ export const PaySupplierModal: React.FC<PaySupplierModalProps> = ({
   useEffect(() => {
     if (!isOpen) return;
     setDate(new Date().toISOString().split('T')[0]);
+    const matchedInitial =
+      initialSupplier && initialSupplier.billCount > 0
+        ? eligiblePayables.find(
+            (p) => p.supplierName.toLowerCase() === initialSupplier.supplierName.toLowerCase()
+          )
+        : null;
     const targetSupplier =
-      initialSupplier || payables.find((p) => p.outstandingPayable > 0) || payables[0] || null;
+      matchedInitial ||
+      eligiblePayables.find((p) => p.outstandingPayable > 0) ||
+      eligiblePayables[0] ||
+      null;
 
     if (targetSupplier) {
       setSelectedSupplierName(targetSupplier.supplierName);
-      setCustomSupplierName('');
       const unpaidBill = targetSupplier.purchases.find(
         (po) => getPurchaseLiveStatus(po, paymentVouchers).balanceDue > 0.5
       );
@@ -68,8 +81,7 @@ export const PaySupplierModal: React.FC<PaySupplierModalProps> = ({
           : ''
       );
     } else {
-      setSelectedSupplierName('__manual__');
-      setCustomSupplierName('');
+      setSelectedSupplierName('');
       setSelectedPurchaseId('');
       setAmount('');
     }
@@ -83,11 +95,11 @@ export const PaySupplierModal: React.FC<PaySupplierModalProps> = ({
     }
     setReferenceNo('');
     setRemarks('');
-  }, [isOpen, initialSupplier, defaultBookType, defaultAccountId]);
+  }, [isOpen, initialSupplier, defaultBookType, defaultAccountId, eligiblePayables]);
 
   if (!isOpen) return null;
 
-  const activeSupplier = payables.find((p) => p.supplierName === selectedSupplierName);
+  const activeSupplier = eligiblePayables.find((p) => p.supplierName === selectedSupplierName);
   const unpaidBills: PurchaseRecord[] = activeSupplier
     ? activeSupplier.purchases.filter((po) => getPurchaseLiveStatus(po, paymentVouchers).balanceDue > 0.5)
     : [];
@@ -95,7 +107,7 @@ export const PaySupplierModal: React.FC<PaySupplierModalProps> = ({
 
   const handleSupplierSelect = (name: string) => {
     setSelectedSupplierName(name);
-    const match = payables.find((p) => p.supplierName === name);
+    const match = eligiblePayables.find((p) => p.supplierName === name);
     if (match) {
       const unpaid = match.purchases.find(
         (po) => getPurchaseLiveStatus(po, paymentVouchers).balanceDue > 0.5
@@ -110,6 +122,7 @@ export const PaySupplierModal: React.FC<PaySupplierModalProps> = ({
       );
     } else {
       setSelectedPurchaseId('');
+      setAmount('');
     }
   };
 
@@ -134,11 +147,9 @@ export const PaySupplierModal: React.FC<PaySupplierModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const numericAmount = parseFloat(amount);
-    const supplierName =
-      selectedSupplierName === '__manual__' ? customSupplierName.trim() : selectedSupplierName;
-    if (!supplierName || !numericAmount || numericAmount <= 0) return;
+    if (!activeSupplier || !numericAmount || numericAmount <= 0) return;
 
-    const linkedBill = activeSupplier?.purchases.find((p) => p.id === selectedPurchaseId);
+    const linkedBill = activeSupplier.purchases.find((p) => p.id === selectedPurchaseId);
 
     setIsSubmitting(true);
     try {
@@ -147,18 +158,21 @@ export const PaySupplierModal: React.FC<PaySupplierModalProps> = ({
         id: `pv-${Date.now()}`,
         voucherNo,
         date,
-        supplierName,
-        supplierGst: activeSupplier?.supplierGst || '',
+        supplierName: activeSupplier.supplierName.slice(0, 150),
+        supplierGst: activeSupplier.supplierGst || '',
         purchaseId: linkedBill?.id || '',
-        purchaseNo: linkedBill?.purchaseNo || '',
+        purchaseNo: (linkedBill?.purchaseNo || '').slice(0, 50),
         amount: numericAmount,
         paymentMode,
         bankAccountId: accountId || (paymentMode === 'Cash' ? CASH_DRAWER_ID : bankOnlyAccounts[0]?.id || ''),
         bankAccountName:
           selectedAccount?.bankName ||
           (paymentMode === 'Cash' ? 'Office Cash Drawer' : bankOnlyAccounts[0]?.bankName || 'Bank Account'),
-        referenceNo: referenceNo.trim(),
-        remarks: remarks.trim() || (linkedBill ? `Against Purchase ${linkedBill.purchaseNo}` : 'Supplier account settlement'),
+        referenceNo: referenceNo.trim().slice(0, 80),
+        remarks: (
+          remarks.trim() ||
+          (linkedBill ? `Against Purchase ${linkedBill.purchaseNo}` : 'Supplier account settlement')
+        ).slice(0, 250),
       };
 
       await onSavePaymentVoucher(voucher);
@@ -176,7 +190,7 @@ export const PaySupplierModal: React.FC<PaySupplierModalProps> = ({
             <ArrowUpRight className="w-5 h-5 text-amber-400" />
             <div>
               <h3 className="font-bold text-sm tracking-wide">Record Supplier Payment Voucher</h3>
-              <p className="text-[11px] text-slate-400">Reduces Supplier Payables &amp; debits Cash/Bank Book</p>
+              <p className="text-[11px] text-slate-400">Linked to past Purchase suppliers · Reduces Payables &amp; credits Cash/Bank Book</p>
             </div>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-white cursor-pointer">
@@ -186,34 +200,24 @@ export const PaySupplierModal: React.FC<PaySupplierModalProps> = ({
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4 text-xs">
           <div>
-            <label className="block text-slate-700 font-bold mb-1">Supplier / Creditor Account</label>
+            <label className="block text-slate-700 font-bold mb-1">Supplier / Creditor Account (Past Purchases Only)</label>
             <select
               value={selectedSupplierName}
+              disabled={eligiblePayables.length === 0}
               onChange={(e) => handleSupplierSelect(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-400 font-semibold text-slate-900"
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-400 font-semibold text-slate-900 disabled:opacity-60"
             >
-              {payables.map((p) => (
-                <option key={p.supplierName} value={p.supplierName}>
-                  {p.supplierName} — Payable: {formatINR(p.outstandingPayable)}
-                </option>
-              ))}
-              <option value="__manual__">+ Enter Other Supplier</option>
+              {eligiblePayables.length === 0 ? (
+                <option value="">No supplier with past Purchase Voucher found</option>
+              ) : (
+                eligiblePayables.map((p) => (
+                  <option key={p.supplierName} value={p.supplierName}>
+                    {p.supplierName} — Payable: {formatINR(p.outstandingPayable)}
+                  </option>
+                ))
+              )}
             </select>
           </div>
-
-          {selectedSupplierName === '__manual__' && (
-            <div>
-              <label className="block text-slate-700 font-bold mb-1">Supplier Name *</label>
-              <input
-                type="text"
-                required
-                value={customSupplierName}
-                onChange={(e) => setCustomSupplierName(e.target.value)}
-                placeholder="Enter manufacturer or vendor name"
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-400 font-semibold"
-              />
-            </div>
-          )}
 
           {activeSupplier && (
             <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg flex items-center justify-between">
@@ -307,6 +311,7 @@ export const PaySupplierModal: React.FC<PaySupplierModalProps> = ({
               <label className="block text-slate-700 font-bold mb-1">UTR / Cheque / Ref No</label>
               <input
                 type="text"
+                maxLength={80}
                 value={referenceNo}
                 onChange={(e) => setReferenceNo(e.target.value)}
                 placeholder="UTR / cheque reference"
@@ -317,6 +322,7 @@ export const PaySupplierModal: React.FC<PaySupplierModalProps> = ({
               <label className="block text-slate-700 font-bold mb-1">Narration / Remarks</label>
               <input
                 type="text"
+                maxLength={250}
                 value={remarks}
                 onChange={(e) => setRemarks(e.target.value)}
                 placeholder="Payment narration or notes"
@@ -335,8 +341,8 @@ export const PaySupplierModal: React.FC<PaySupplierModalProps> = ({
             </button>
             <button
               type="submit"
-              disabled={isSubmitting}
-              className="flex items-center gap-1.5 px-5 py-2 bg-[#F6B118] hover:bg-[#E5A010] text-slate-950 font-bold rounded-lg shadow-sm cursor-pointer disabled:opacity-50"
+              disabled={isSubmitting || eligiblePayables.length === 0}
+              className="flex items-center gap-1.5 px-5 py-2 bg-[#F6B118] hover:bg-[#E5A010] text-slate-950 font-bold rounded-lg shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <CheckCircle2 className="w-4 h-4" />
               <span>{isSubmitting ? 'Posting...' : 'Post Payment Voucher'}</span>

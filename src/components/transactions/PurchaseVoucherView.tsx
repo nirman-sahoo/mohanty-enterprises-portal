@@ -62,6 +62,7 @@ export const PurchaseVoucherView: React.FC<PurchaseVoucherViewProps> = ({
   const [purchaseNo, setPurchaseNo] = useState<string>('');
   const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [supplierName, setSupplierName] = useState<string>('');
+  const [retailerName, setRetailerName] = useState<string>('');
   const [supplierPhone, setSupplierPhone] = useState<string>('');
   const [challanNo, setChallanNo] = useState<string>('');
   const [truckNumber, setTruckNumber] = useState<string>('');
@@ -182,6 +183,7 @@ export const PurchaseVoucherView: React.FC<PurchaseVoucherViewProps> = ({
   const resetForm = () => {
     setPurchaseNo('');
     setSupplierName('');
+    setRetailerName('');
     setSupplierPhone('');
     setChallanNo('');
     setTruckNumber('');
@@ -262,7 +264,8 @@ export const PurchaseVoucherView: React.FC<PurchaseVoucherViewProps> = ({
     const newPurchase: PurchaseRecord = {
       id: `po-${Date.now()}`,
       purchaseNo: effectivePurchaseNo,
-      supplierName: supplierName.trim(),
+      supplierName: supplierName.trim().slice(0, 150),
+      retailerName: retailerName.trim().slice(0, 150),
       supplierGst: '',
       supplierPhone: supplierPhone.trim(),
       date,
@@ -303,10 +306,15 @@ export const PurchaseVoucherView: React.FC<PurchaseVoucherViewProps> = ({
     new Set(purchases.map((p) => p.supplierName).filter(Boolean))
   );
 
+  const retailerSuggestions = Array.from(
+    new Set(purchases.map((p) => p.retailerName).filter((r): r is string => Boolean(r)))
+  );
+
   const filteredPurchases = purchases.filter(
     (p) =>
       p.purchaseNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.supplierName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (p.retailerName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.challanNo.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -340,14 +348,15 @@ export const PurchaseVoucherView: React.FC<PurchaseVoucherViewProps> = ({
 
       {/* Purchase Voucher Entry Form */}
       <form onSubmit={handleSubmit} className="bg-white p-5 sm:p-6 rounded-xl border border-slate-200 space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="md:col-span-2">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+          <div className="md:col-span-5">
             <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
               Supplier / Manufacturer Name <span className="text-rose-500">*</span>
             </label>
             <input
               type="text"
               required
+              maxLength={150}
               list="purchase-supplier-list"
               value={supplierName}
               onChange={(e) => handleSupplierChange(e.target.value)}
@@ -361,7 +370,27 @@ export const PurchaseVoucherView: React.FC<PurchaseVoucherViewProps> = ({
             </datalist>
           </div>
 
-          <div>
+          <div className="md:col-span-4">
+            <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+              Retailer Name
+            </label>
+            <input
+              type="text"
+              maxLength={150}
+              list="purchase-retailer-list"
+              value={retailerName}
+              onChange={(e) => setRetailerName(e.target.value)}
+              placeholder="Enter retailer / dealer name (optional)"
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:bg-white"
+            />
+            <datalist id="purchase-retailer-list">
+              {retailerSuggestions.map((r) => (
+                <option key={r} value={r} />
+              ))}
+            </datalist>
+          </div>
+
+          <div className="md:col-span-3">
             <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
               Purchase Date <span className="text-rose-500">*</span>
             </label>
@@ -707,7 +736,7 @@ export const PurchaseVoucherView: React.FC<PurchaseVoucherViewProps> = ({
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search voucher no, supplier, challan..."
+              placeholder="Search voucher no, supplier, retailer, challan..."
               className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400"
             />
           </div>
@@ -743,6 +772,9 @@ export const PurchaseVoucherView: React.FC<PurchaseVoucherViewProps> = ({
                       <td className="py-3 px-3 font-mono text-slate-500">{po.date}</td>
                       <td className="py-3 px-3">
                         <p className="font-bold text-slate-900">{po.supplierName}</p>
+                        {po.retailerName && (
+                          <p className="text-[11px] text-slate-600">Retailer: {po.retailerName}</p>
+                        )}
                         <p className="text-[10px] font-mono text-slate-400">Challan: {po.challanNo || '—'}</p>
                       </td>
                       <td className="py-3 px-3 text-slate-700">

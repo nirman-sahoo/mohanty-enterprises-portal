@@ -52,6 +52,7 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
       return (
         po.purchaseNo.toLowerCase().includes(q) ||
         po.supplierName.toLowerCase().includes(q) ||
+        (po.retailerName || '').toLowerCase().includes(q) ||
         (po.challanNo || '').toLowerCase().includes(q)
       );
     });
@@ -73,6 +74,7 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
       'Date',
       'Purchase Voucher No',
       'Supplier Name',
+      'Retailer Name',
       'Challan / L.R. No',
       'Bill Amount',
       'Settled Amount',
@@ -83,6 +85,7 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
       po.date,
       `"${po.purchaseNo}"`,
       `"${po.supplierName}"`,
+      `"${po.retailerName || ''}"`,
       `"${po.challanNo || ''}"`,
       po.totalAmount,
       live.totalSettled,
@@ -175,7 +178,7 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search purchase no, supplier, challan..."
+              placeholder="Search purchase no, supplier, retailer, challan..."
               className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-amber-400"
             />
           </div>
@@ -248,6 +251,9 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
                       </td>
                       <td className="py-3 px-4">
                         <p className="font-bold text-slate-900">{po.supplierName}</p>
+                        {po.retailerName && (
+                          <p className="text-[11px] text-slate-500">Retailer: {po.retailerName}</p>
+                        )}
                       </td>
                       <td className="py-3 px-4 text-slate-700 font-medium max-w-[190px] truncate">{itemText}</td>
                       <td className="py-3 px-4 text-right font-mono tabular-nums font-extrabold text-slate-950">

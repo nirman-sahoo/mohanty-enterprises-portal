@@ -151,6 +151,7 @@ export interface PurchaseRecord {
   id: string;
   purchaseNo: string;
   supplierName: string;
+  retailerName?: string;
   supplierGst: string;
   supplierPhone?: string;
   supplierAddress?: string;

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Home,
   ShoppingCart,
@@ -15,12 +15,16 @@ import {
   ChevronRight,
   MessageCircle,
   X,
+  ArrowDownLeft,
+  ArrowUpRight,
 } from 'lucide-react';
 
 export type NavTab =
   | 'dashboard'
   | 'sales-voucher'
   | 'purchase-voucher'
+  | 'receipt-voucher'
+  | 'payment-voucher'
   | 'bank-book'
   | 'cash-book'
   | 'contra-entry'
@@ -47,6 +51,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onCloseMobile,
   companyPhone = '',
 }) => {
+  const [isBankingOpen, setIsBankingOpen] = useState(false);
+
+  useEffect(() => {
+    if (activeTab === 'bank-book' || activeTab === 'cash-book' || activeTab === 'contra-entry') {
+      setIsBankingOpen(true);
+    }
+  }, [activeTab]);
+
   const handleItemClick = (tab: NavTab) => {
     onTabChange(tab);
     if (onCloseMobile) {
@@ -130,36 +142,64 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 </div>
                 <ChevronRight className={`w-3 h-3 ${activeTab === 'purchase-voucher' ? 'text-slate-900' : 'text-slate-600'}`} />
               </button>
+
+              <button onClick={() => handleItemClick('receipt-voucher')} className={navItemClass('receipt-voucher')}>
+                <div className="flex items-center gap-2.5">
+                  <ArrowDownLeft className={iconClass('receipt-voucher')} />
+                  <span>Receipt Voucher</span>
+                </div>
+                <ChevronRight className={`w-3 h-3 ${activeTab === 'receipt-voucher' ? 'text-slate-900' : 'text-slate-600'}`} />
+              </button>
+
+              <button onClick={() => handleItemClick('payment-voucher')} className={navItemClass('payment-voucher')}>
+                <div className="flex items-center gap-2.5">
+                  <ArrowUpRight className={iconClass('payment-voucher')} />
+                  <span>Payment Voucher</span>
+                </div>
+                <ChevronRight className={`w-3 h-3 ${activeTab === 'payment-voucher' ? 'text-slate-900' : 'text-slate-600'}`} />
+              </button>
             </div>
           </div>
 
           {/* GROUP 2: BANKING */}
           <div>
-            <div className="text-[10px] font-extrabold uppercase tracking-wider text-amber-400 px-3 py-1">
-              Banking
-            </div>
-            <div className="space-y-0.5 mt-1">
-              <button onClick={() => handleItemClick('bank-book')} className={navItemClass('bank-book')}>
-                <div className="flex items-center gap-2.5">
-                  <Building2 className={iconClass('bank-book')} />
-                  <span>Bank Book</span>
-                </div>
-              </button>
+            <button
+              type="button"
+              onClick={() => setIsBankingOpen((prev) => !prev)}
+              aria-expanded={isBankingOpen}
+              className="w-full flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-wider text-amber-400 hover:bg-slate-800/60 px-3 py-1.5 rounded-md transition-colors cursor-pointer text-left"
+            >
+              <span>Banking</span>
+              <ChevronRight
+                className={`w-3.5 h-3.5 text-amber-400 transition-transform duration-150 ${
+                  isBankingOpen ? 'rotate-90' : ''
+                }`}
+              />
+            </button>
+            {isBankingOpen && (
+              <div className="space-y-0.5 mt-1 pl-1">
+                <button onClick={() => handleItemClick('bank-book')} className={navItemClass('bank-book')}>
+                  <div className="flex items-center gap-2.5">
+                    <Building2 className={iconClass('bank-book')} />
+                    <span>Bank Book</span>
+                  </div>
+                </button>
 
-              <button onClick={() => handleItemClick('cash-book')} className={navItemClass('cash-book')}>
-                <div className="flex items-center gap-2.5">
-                  <Wallet className={iconClass('cash-book')} />
-                  <span>Cash Book</span>
-                </div>
-              </button>
+                <button onClick={() => handleItemClick('cash-book')} className={navItemClass('cash-book')}>
+                  <div className="flex items-center gap-2.5">
+                    <Wallet className={iconClass('cash-book')} />
+                    <span>Cash Book</span>
+                  </div>
+                </button>
 
-              <button onClick={() => handleItemClick('contra-entry')} className={navItemClass('contra-entry')}>
-                <div className="flex items-center gap-2.5">
-                  <ArrowLeftRight className={iconClass('contra-entry')} />
-                  <span>Contra Entry</span>
-                </div>
-              </button>
-            </div>
+                <button onClick={() => handleItemClick('contra-entry')} className={navItemClass('contra-entry')}>
+                  <div className="flex items-center gap-2.5">
+                    <ArrowLeftRight className={iconClass('contra-entry')} />
+                    <span>Contra Entry</span>
+                  </div>
+                </button>
+              </div>
+            )}
           </div>
 
           {/* GROUP 3: REPORTS */}

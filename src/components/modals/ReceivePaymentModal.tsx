@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { X, ArrowDownLeft, CheckCircle2 } from 'lucide-react';
-import { BankAccount, CustomerLedger, MoneyReceipt } from '../../types';
+import { BankAccount, CustomerLedger, MoneyReceipt, SaleRecord } from '../../types';
 import { formatINR, numberToIndianWords } from '../../utils/formatters';
 import { CASH_DRAWER_ID, isCashAccount } from '../../utils/accountingEngine';
 
@@ -8,6 +8,7 @@ interface ReceivePaymentModalProps {
   isOpen: boolean;
   onClose: () => void;
   ledgers: CustomerLedger[];
+  sales: SaleRecord[];
   bankAccounts: BankAccount[];
   initialParty?: CustomerLedger | null;
   defaultBookType?: 'cash' | 'bank';
@@ -17,10 +18,18 @@ interface ReceivePaymentModalProps {
   onSaveReceipt: (receipt: MoneyReceipt, ledger?: CustomerLedger) => Promise<void>;
 }
 
+interface SalesPartyOption {
+  key: string;
+  name: string;
+  ledger?: CustomerLedger;
+  outstandingDue: number;
+}
+
 export const ReceivePaymentModal: React.FC<ReceivePaymentModalProps> = ({
   isOpen,
   onClose,
   ledgers,
+  sales,
   bankAccounts,
   initialParty = null,
   defaultBookType = 'bank',
@@ -32,8 +41,26 @@ export const ReceivePaymentModal: React.FC<ReceivePaymentModalProps> = ({
   const cashAccount = bankAccounts.find((a) => isCashAccount(a));
   const bankOnlyAccounts = bankAccounts.filter((a) => !isCashAccount(a));
 
-  const [selectedLedgerId, setSelectedLedgerId] = useState<string>('');
-  const [partyNameManual, setPartyNameManual] = useState<string>('');
+  const eligibleParties = useMemo<SalesPartyOption[]>(() => {
+    const map = new Map<string, SalesPartyOption>();
+    sales.forEach((sale) => {
+      if (sale.status === 'Cancelled') return;
+      const rawName = (sale.customerName || '').trim();
+      if (!rawName) return;
+      const key = rawName.toLowerCase();
+      if (map.has(key)) return;
+      const matchedLedger = ledgers.find((l) => l.name.trim().toLowerCase() === key);
+      map.set(key, {
+        key,
+        name: matchedLedger?.name || rawName,
+        ledger: matchedLedger,
+        outstandingDue: matchedLedger ? Math.max(0, matchedLedger.outstandingReceivable || 0) : 0,
+      });
+    });
+    return Array.from(map.values()).sort((a, b) => b.outstandingDue - a.outstandingDue);
+  }, [sales, ledgers]);
+
+  const [selectedPartyKey, setSelectedPartyKey] = useState<string>('');
   const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [amount, setAmount] = useState<string>('');
   const [paymentMode, setPaymentMode] = useState<MoneyReceipt['paymentMode']>(
@@ -47,15 +74,17 @@ export const ReceivePaymentModal: React.FC<ReceivePaymentModalProps> = ({
   useEffect(() => {
     if (!isOpen) return;
     setDate(new Date().toISOString().split('T')[0]);
-    if (initialParty) {
-      setSelectedLedgerId(initialParty.id);
-      setPartyNameManual(initialParty.name);
-      setAmount(initialParty.outstandingReceivable > 0 ? String(initialParty.outstandingReceivable) : '');
+    const matchedInitial = initialParty
+      ? eligibleParties.find((p) => p.key === initialParty.name.trim().toLowerCase())
+      : null;
+    const target = matchedInitial || eligibleParties[0] || null;
+
+    if (target) {
+      setSelectedPartyKey(target.key);
+      setAmount(target.outstandingDue > 0 ? String(target.outstandingDue) : '');
     } else {
-      const firstDue = ledgers.find((l) => l.outstandingReceivable > 0) || ledgers[0];
-      setSelectedLedgerId(firstDue ? firstDue.id : '__manual__');
-      setPartyNameManual(firstDue ? firstDue.name : '');
-      setAmount(firstDue && firstDue.outstandingReceivable > 0 ? String(firstDue.outstandingReceivable) : '');
+      setSelectedPartyKey('');
+      setAmount('');
     }
 
     if (defaultBookType === 'cash') {
@@ -67,23 +96,21 @@ export const ReceivePaymentModal: React.FC<ReceivePaymentModalProps> = ({
     }
     setReferenceNo('');
     setRemarks('');
-  }, [isOpen, initialParty, defaultBookType, defaultAccountId]);
+  }, [isOpen, initialParty, defaultBookType, defaultAccountId, eligibleParties]);
 
   if (!isOpen) return null;
 
-  const selectedLedger = ledgers.find((l) => l.id === selectedLedgerId);
+  const selectedParty = eligibleParties.find((p) => p.key === selectedPartyKey) || null;
+  const selectedLedger = selectedParty?.ledger;
   const selectedAccount = bankAccounts.find((a) => a.id === accountId);
 
-  const handlePartyChange = (val: string) => {
-    setSelectedLedgerId(val);
-    const match = ledgers.find((l) => l.id === val);
-    if (match) {
-      setPartyNameManual(match.name);
-      if (match.outstandingReceivable > 0) {
-        setAmount(String(match.outstandingReceivable));
-      }
+  const handlePartyChange = (key: string) => {
+    setSelectedPartyKey(key);
+    const match = eligibleParties.find((p) => p.key === key);
+    if (match && match.outstandingDue > 0) {
+      setAmount(String(match.outstandingDue));
     } else {
-      setPartyNameManual('');
+      setAmount('');
     }
   };
 
@@ -99,8 +126,7 @@ export const ReceivePaymentModal: React.FC<ReceivePaymentModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const numericAmount = parseFloat(amount);
-    const partyName = selectedLedger ? selectedLedger.name : partyNameManual.trim();
-    if (!partyName || !numericAmount || numericAmount <= 0) return;
+    if (!selectedParty || !numericAmount || numericAmount <= 0) return;
 
     setIsSubmitting(true);
     try {
@@ -109,11 +135,11 @@ export const ReceivePaymentModal: React.FC<ReceivePaymentModalProps> = ({
         id: `rcp-${Date.now()}`,
         receiptNo,
         date,
-        partyName,
-        partyAddress: selectedLedger?.address || '',
-        partyPhone: selectedLedger?.phone || '',
+        partyName: selectedParty.name.slice(0, 150),
+        partyAddress: (selectedLedger?.address || '').slice(0, 250),
+        partyPhone: (selectedLedger?.phone || '').slice(0, 30),
         amount: numericAmount,
-        amountInWords: numberToIndianWords(numericAmount),
+        amountInWords: numberToIndianWords(numericAmount).slice(0, 300),
         paymentMode,
         bankAccountId: accountId || (paymentMode === 'Cash' ? CASH_DRAWER_ID : bankOnlyAccounts[0]?.id || ''),
         bankAccountName:
@@ -122,8 +148,8 @@ export const ReceivePaymentModal: React.FC<ReceivePaymentModalProps> = ({
         forAccount: 'Material Supply Ledger Settlement',
         paidAmount: (selectedLedger?.totalPaid || 0) + numericAmount,
         dueAmount: Math.max(0, (selectedLedger?.outstandingReceivable || 0) - numericAmount),
-        referenceNo: referenceNo.trim(),
-        remarks: remarks.trim(),
+        referenceNo: referenceNo.trim().slice(0, 50),
+        remarks: remarks.trim().slice(0, 250),
       };
 
       await onSaveReceipt(newReceipt, selectedLedger);
@@ -141,7 +167,7 @@ export const ReceivePaymentModal: React.FC<ReceivePaymentModalProps> = ({
             <ArrowDownLeft className="w-5 h-5 text-emerald-400" />
             <div>
               <h3 className="font-bold text-sm tracking-wide">Record Customer Receipt (Money Receipt)</h3>
-              <p className="text-[11px] text-slate-400">Updates Party Outstandings &amp; Cash/Bank Book simultaneously</p>
+              <p className="text-[11px] text-slate-400">Linked to past Sales parties · Updates Party Outstandings &amp; Cash/Bank Book</p>
             </div>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-white cursor-pointer">
@@ -151,40 +177,30 @@ export const ReceivePaymentModal: React.FC<ReceivePaymentModalProps> = ({
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4 text-xs">
           <div>
-            <label className="block text-slate-700 font-bold mb-1">Party / Customer Account</label>
+            <label className="block text-slate-700 font-bold mb-1">Party / Customer Account (Past Sales Only)</label>
             <select
-              value={selectedLedgerId}
+              value={selectedPartyKey}
+              disabled={eligibleParties.length === 0}
               onChange={(e) => handlePartyChange(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-400 font-semibold text-slate-900"
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-400 font-semibold text-slate-900 disabled:opacity-60"
             >
-              {ledgers.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.name} — Due: {formatINR(l.outstandingReceivable)}
-                </option>
-              ))}
-              <option value="__manual__">+ Enter Custom Party Name</option>
+              {eligibleParties.length === 0 ? (
+                <option value="">No party with past Sales Voucher found</option>
+              ) : (
+                eligibleParties.map((p) => (
+                  <option key={p.key} value={p.key}>
+                    {p.name} — Due: {formatINR(p.outstandingDue)}
+                  </option>
+                ))
+              )}
             </select>
           </div>
 
-          {selectedLedgerId === '__manual__' && (
-            <div>
-              <label className="block text-slate-700 font-bold mb-1">Custom Party Name</label>
-              <input
-                type="text"
-                required
-                value={partyNameManual}
-                onChange={(e) => setPartyNameManual(e.target.value)}
-                placeholder="Enter customer or contractor name"
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-400 font-semibold"
-              />
-            </div>
-          )}
-
-          {selectedLedger && (
+          {selectedParty && (
             <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center justify-between">
               <span className="text-amber-900 font-semibold">Current Party Outstanding:</span>
               <span className="font-mono font-bold text-rose-700 tabular-nums">
-                {formatINR(selectedLedger.outstandingReceivable)}
+                {formatINR(selectedParty.outstandingDue)}
               </span>
             </div>
           )}
@@ -251,6 +267,7 @@ export const ReceivePaymentModal: React.FC<ReceivePaymentModalProps> = ({
               <label className="block text-slate-700 font-bold mb-1">UTR / Cheque / Ref No</label>
               <input
                 type="text"
+                maxLength={50}
                 value={referenceNo}
                 onChange={(e) => setReferenceNo(e.target.value)}
                 placeholder="Optional reference"
@@ -261,6 +278,7 @@ export const ReceivePaymentModal: React.FC<ReceivePaymentModalProps> = ({
               <label className="block text-slate-700 font-bold mb-1">Narration / Remarks</label>
               <input
                 type="text"
+                maxLength={250}
                 value={remarks}
                 onChange={(e) => setRemarks(e.target.value)}
                 placeholder="Payment narration or notes"
@@ -279,8 +297,8 @@ export const ReceivePaymentModal: React.FC<ReceivePaymentModalProps> = ({
             </button>
             <button
               type="submit"
-              disabled={isSubmitting}
-              className="flex items-center gap-1.5 px-5 py-2 bg-[#F6B118] hover:bg-[#E5A010] text-slate-950 font-bold rounded-lg shadow-sm cursor-pointer disabled:opacity-50"
+              disabled={isSubmitting || eligibleParties.length === 0}
+              className="flex items-center gap-1.5 px-5 py-2 bg-[#F6B118] hover:bg-[#E5A010] text-slate-950 font-bold rounded-lg shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <CheckCircle2 className="w-4 h-4" />
               <span>{isSubmitting ? 'Posting...' : 'Post Receipt & Generate Slip'}</span>
