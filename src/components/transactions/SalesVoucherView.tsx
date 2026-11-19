@@ -527,28 +527,15 @@ export const SalesVoucherView: React.FC<SalesVoucherViewProps> = ({
                         />
                       </td>
                       <td className="py-2 px-3">
-                        <div className="flex items-center gap-1">
-                          <select
-                            value={item.unit}
-                            onChange={(e) => handleLineChange(item.id, 'unit', e.target.value as UnitType)}
-                            className="w-full px-1.5 py-1.5 bg-slate-50 border border-slate-300 rounded text-xs"
-                          >
-                            {ALL_UNITS.map((u) => (
-                              <option key={u} value={u}>{u}</option>
-                            ))}
-                          </select>
-                          <button
-                            type="button"
-                            onClick={() => handleLineChange(item.id, 'unit', 'KG')}
-                            className={`px-1.5 py-1 text-[10px] font-bold rounded border cursor-pointer ${
-                              item.unit === 'KG'
-                                ? 'bg-amber-500 text-slate-950 border-amber-600'
-                                : 'bg-slate-100 text-slate-700 border-slate-300'
-                            }`}
-                          >
-                            KG
-                          </button>
-                        </div>
+                        <select
+                          value={item.unit}
+                          onChange={(e) => handleLineChange(item.id, 'unit', e.target.value as UnitType)}
+                          className="w-full px-2 py-1.5 bg-slate-50 border border-slate-300 rounded text-xs"
+                        >
+                          {ALL_UNITS.map((u) => (
+                            <option key={u} value={u}>{u}</option>
+                          ))}
+                        </select>
                       </td>
                       <td className="py-2 px-3">
                         <input
